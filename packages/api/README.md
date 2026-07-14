@@ -84,6 +84,7 @@ gcloud run deploy timothy-api \
 | `FIREBASE_CLIENT_EMAIL` | （任意）サービスアカウントキーで明示認証する場合のみ設定 | Secret Manager |
 | `FIREBASE_PRIVATE_KEY` | （任意）サービスアカウントキーで明示認証する場合のみ設定（`\n` を含む） | Secret Manager |
 | `FIREBASE_STORAGE_BUCKET` | Cloud Storage バケット名 | 環境変数（非シークレット） |
+| `FIRESTORE_DATABASE_ID` | （任意）`(default)` 以外の名前付きFirestoreデータベースを使う場合のみ設定 | 環境変数（非シークレット） |
 | `PORT` | サーバーのリッスンポート（デフォルト: 3000） | Cloud Run が 8080 を自動注入 |
 
 ---
