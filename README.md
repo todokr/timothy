@@ -160,6 +160,14 @@ gcloud projects add-iam-policy-binding ${PROJECT} \
   --member "serviceAccount:${SA}" \
   --role "roles/storage.objectAdmin"
 
+By default the API authenticates to Firebase using Application Default Credentials (ADC) —
+i.e. whichever service account Cloud Run runs as. No key file is required for this path;
+skip the `gcloud iam service-accounts keys create` step below unless you specifically need
+an exported key (e.g. for local testing outside an emulator, or non-GCP hosting).
+
+```bash
+# Only needed if you want to authenticate with an explicit service account key
+# instead of ADC:
 gcloud iam service-accounts keys create serviceAccount.json \
   --iam-account ${SA}
 ```
@@ -174,21 +182,20 @@ gcloud artifacts repositories create timothy \
 
 ### 5. Register secrets in Secret Manager
 
+`FIREBASE_PROJECT_ID` and `FIREBASE_STORAGE_BUCKET` are not sensitive, so plain environment
+variables are enough. Only register a secret if you're using an explicit service account key:
+
 ```bash
-echo -n "${PROJECT}" | gcloud secrets create FIREBASE_PROJECT_ID --data-file=-
-echo -n "timothy-api@${PROJECT}.iam.gserviceaccount.com" | gcloud secrets create FIREBASE_CLIENT_EMAIL --data-file=-
-echo -n "${PROJECT}-timothy" | gcloud secrets create FIREBASE_STORAGE_BUCKET --data-file=-
+# Only needed if you created serviceAccount.json in step 3
 printf '%s' "$(cat serviceAccount.json | jq -r .private_key)" \
   | gcloud secrets create FIREBASE_PRIVATE_KEY --data-file=-
-```
+echo -n "$(cat serviceAccount.json | jq -r .client_email)" \
+  | gcloud secrets create FIREBASE_CLIENT_EMAIL --data-file=-
 
-Grant the Cloud Run default service account access to these secrets:
-
-```bash
 PROJECT_NUMBER=$(gcloud projects describe ${PROJECT} --format='value(projectNumber)')
 CLOUD_RUN_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-for SECRET in FIREBASE_PROJECT_ID FIREBASE_CLIENT_EMAIL FIREBASE_STORAGE_BUCKET FIREBASE_PRIVATE_KEY; do
+for SECRET in FIREBASE_CLIENT_EMAIL FIREBASE_PRIVATE_KEY; do
   gcloud secrets add-iam-policy-binding ${SECRET} \
     --member "serviceAccount:${CLOUD_RUN_SA}" \
     --role "roles/secretmanager.secretAccessor"
@@ -206,7 +213,7 @@ docker build -f packages/api/Dockerfile -t ${IMAGE} .
 docker push ${IMAGE}
 ```
 
-Deploy to Cloud Run:
+Deploy to Cloud Run, running as the service account created in step 3 (ADC path):
 
 ```bash
 gcloud run deploy timothy-api \
@@ -214,12 +221,14 @@ gcloud run deploy timothy-api \
   --region ${REGION} \
   --min-instances 0 \
   --max-instances 2 \
-  --set-secrets FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest \
-  --set-secrets FIREBASE_CLIENT_EMAIL=FIREBASE_CLIENT_EMAIL:latest \
-  --set-secrets FIREBASE_PRIVATE_KEY=FIREBASE_PRIVATE_KEY:latest \
-  --set-secrets FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest \
+  --service-account ${SA} \
+  --set-env-vars FIREBASE_PROJECT_ID=${PROJECT} \
+  --set-env-vars FIREBASE_STORAGE_BUCKET=${PROJECT}-timothy \
   --allow-unauthenticated
 ```
+
+If you registered `FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` secrets in step 5 instead,
+add `--set-secrets FIREBASE_CLIENT_EMAIL=FIREBASE_CLIENT_EMAIL:latest --set-secrets FIREBASE_PRIVATE_KEY=FIREBASE_PRIVATE_KEY:latest`.
 
 Note: `--allow-unauthenticated` is required so that share URLs (`/s/<id>`) are accessible to anyone who knows the link. Upload and list/delete endpoints are protected by the API key at the application level.
 
@@ -227,7 +236,18 @@ After deploying, note the service URL printed by the command — you'll need it 
 
 ### 7. Issue an API key
 
-Add an entry to Firestore's `apiKeys` collection using the seed script:
+Add an entry to Firestore's `apiKeys` collection using the seed script. If you're
+authenticated locally via `gcloud auth application-default login` with access to the
+project, no key file is needed:
+
+```bash
+FIREBASE_PROJECT_ID=${PROJECT} \
+API_KEY=$(openssl rand -hex 32) \
+USER_ID=user@example.com \
+npx tsx packages/api/scripts/seed-api-key.ts
+```
+
+Otherwise, use the service account key from step 3:
 
 ```bash
 FIREBASE_PROJECT_ID=${PROJECT} \

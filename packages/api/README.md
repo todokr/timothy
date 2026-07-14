@@ -36,21 +36,15 @@ FIREBASE_STORAGE_BUCKET=demo-test.example.com
 
 - Google Cloud SDK (`gcloud`) インストール済み
 - Artifact Registry リポジトリ作成済み
-- Secret Manager に各シークレット登録済み（後述）
-- Cloud Run サービスアカウントに Secret Manager アクセス権限付与済み
+- Cloud Run サービスアカウントに Firestore / Cloud Storage へのアクセス権限付与済み
 
-### シークレット登録（初回のみ）
+### 認証方式
 
-```bash
-# サービスアカウントキー（JSON）から各値を取り出して登録
-echo -n "your-project-id" | gcloud secrets create FIREBASE_PROJECT_ID --data-file=-
-echo -n "your-client-email@project.iam.gserviceaccount.com" | gcloud secrets create FIREBASE_CLIENT_EMAIL --data-file=-
-echo -n "your-bucket-name.appspot.com" | gcloud secrets create FIREBASE_STORAGE_BUCKET --data-file=-
-
-# 秘密鍵は改行を含むため printf を使う
-printf '%s' "$(cat serviceAccount.json | jq -r .private_key)" \
-  | gcloud secrets create FIREBASE_PRIVATE_KEY --data-file=-
-```
+デフォルトでは Cloud Run の実行サービスアカウント（ADC: Application Default Credentials）で
+Firebase Admin SDK を初期化する。`FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` を
+デプロイ時に設定しなければ、Workload Identity 等で紐づいたサービスアカウントの権限がそのまま使われる。
+サービスアカウントキー（JSON）を明示的に使いたい場合のみ、この2つの環境変数を設定する
+（値は Secret Manager 等で秘匿すること）。
 
 ### イメージビルド & プッシュ
 
@@ -71,12 +65,14 @@ gcloud run deploy timothy-api \
   --region ${REGION} \
   --min-instances 0 \
   --max-instances 2 \
-  --set-secrets FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest \
-  --set-secrets FIREBASE_CLIENT_EMAIL=FIREBASE_CLIENT_EMAIL:latest \
-  --set-secrets FIREBASE_PRIVATE_KEY=FIREBASE_PRIVATE_KEY:latest \
-  --set-secrets FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest \
+  --service-account your-runtime-sa@${PROJECT}.iam.gserviceaccount.com \
+  --set-env-vars FIREBASE_PROJECT_ID=${PROJECT} \
+  --set-env-vars FIREBASE_STORAGE_BUCKET=your-bucket-name.appspot.com \
   --no-allow-unauthenticated
 ```
+
+サービスアカウントキーを明示的に使う場合は、上記に加えて
+`--set-secrets FIREBASE_CLIENT_EMAIL=...`・`--set-secrets FIREBASE_PRIVATE_KEY=...` を指定する。
 
 ---
 
@@ -84,10 +80,10 @@ gcloud run deploy timothy-api \
 
 | 変数名 | 説明 | 本番での管理方法 |
 |---|---|---|
-| `FIREBASE_PROJECT_ID` | GCP プロジェクト ID | Secret Manager |
-| `FIREBASE_CLIENT_EMAIL` | サービスアカウントのメールアドレス | Secret Manager |
-| `FIREBASE_PRIVATE_KEY` | サービスアカウントの秘密鍵（`\n` を含む） | Secret Manager |
-| `FIREBASE_STORAGE_BUCKET` | Cloud Storage バケット名 | Secret Manager |
+| `FIREBASE_PROJECT_ID` | GCP プロジェクト ID | 環境変数（非シークレット） |
+| `FIREBASE_CLIENT_EMAIL` | （任意）サービスアカウントキーで明示認証する場合のみ設定 | Secret Manager |
+| `FIREBASE_PRIVATE_KEY` | （任意）サービスアカウントキーで明示認証する場合のみ設定（`\n` を含む） | Secret Manager |
+| `FIREBASE_STORAGE_BUCKET` | Cloud Storage バケット名 | 環境変数（非シークレット） |
 | `PORT` | サーバーのリッスンポート（デフォルト: 3000） | Cloud Run が 8080 を自動注入 |
 
 ---

@@ -5,7 +5,10 @@
  * エミュレーター:
  *   FIRESTORE_EMULATOR_HOST=localhost:8080 tsx scripts/seed-api-key.ts
  *
- * 本番Firestore:
+ * 本番Firestore (ADC / `gcloud auth application-default login` 済みの場合):
+ *   FIREBASE_PROJECT_ID=... tsx scripts/seed-api-key.ts
+ *
+ * 本番Firestore (サービスアカウントキーを明示指定する場合):
  *   FIREBASE_PROJECT_ID=... FIREBASE_CLIENT_EMAIL=... FIREBASE_PRIVATE_KEY=... \
  *   tsx scripts/seed-api-key.ts
  */
