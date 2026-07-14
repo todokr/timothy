@@ -160,6 +160,13 @@ gcloud projects add-iam-policy-binding ${PROJECT} \
   --member "serviceAccount:${SA}" \
   --role "roles/storage.objectAdmin"
 
+デフォルトではCloud Runの実行サービスアカウント（ADC: Application Default Credentials）で
+Firebaseに認証します。この方式ではキーファイルは不要です。ローカルでのエミュレータ外テストや
+GCP以外へのホスティングなど、明示的にエクスポートしたキーが必要な場合のみ、下記の
+`gcloud iam service-accounts keys create` を実行してください。
+
+```bash
+# ADCではなく、サービスアカウントキーを明示的に使って認証したい場合のみ実行
 gcloud iam service-accounts keys create serviceAccount.json \
   --iam-account ${SA}
 ```
@@ -174,21 +181,20 @@ gcloud artifacts repositories create timothy \
 
 ### 5. Secret Managerへのシークレット登録
 
+`FIREBASE_PROJECT_ID` と `FIREBASE_STORAGE_BUCKET` は機密情報ではないため、通常の環境変数で
+問題ありません。サービスアカウントキーを使う場合のみ、シークレットとして登録してください:
+
 ```bash
-echo -n "${PROJECT}" | gcloud secrets create FIREBASE_PROJECT_ID --data-file=-
-echo -n "timothy-api@${PROJECT}.iam.gserviceaccount.com" | gcloud secrets create FIREBASE_CLIENT_EMAIL --data-file=-
-echo -n "${PROJECT}-timothy" | gcloud secrets create FIREBASE_STORAGE_BUCKET --data-file=-
+# 手順3でserviceAccount.jsonを作成した場合のみ実行
 printf '%s' "$(cat serviceAccount.json | jq -r .private_key)" \
   | gcloud secrets create FIREBASE_PRIVATE_KEY --data-file=-
-```
+echo -n "$(cat serviceAccount.json | jq -r .client_email)" \
+  | gcloud secrets create FIREBASE_CLIENT_EMAIL --data-file=-
 
-Cloud Runのデフォルトサービスアカウントにシークレットへのアクセス権を付与します:
-
-```bash
 PROJECT_NUMBER=$(gcloud projects describe ${PROJECT} --format='value(projectNumber)')
 CLOUD_RUN_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
-for SECRET in FIREBASE_PROJECT_ID FIREBASE_CLIENT_EMAIL FIREBASE_STORAGE_BUCKET FIREBASE_PRIVATE_KEY; do
+for SECRET in FIREBASE_CLIENT_EMAIL FIREBASE_PRIVATE_KEY; do
   gcloud secrets add-iam-policy-binding ${SECRET} \
     --member "serviceAccount:${CLOUD_RUN_SA}" \
     --role "roles/secretmanager.secretAccessor"
@@ -206,7 +212,7 @@ docker build -f packages/api/Dockerfile -t ${IMAGE} .
 docker push ${IMAGE}
 ```
 
-Cloud Runにデプロイします:
+Cloud Runにデプロイします（手順3で作成したサービスアカウントで実行、ADC方式）:
 
 ```bash
 gcloud run deploy timothy-api \
@@ -214,12 +220,15 @@ gcloud run deploy timothy-api \
   --region ${REGION} \
   --min-instances 0 \
   --max-instances 2 \
-  --set-secrets FIREBASE_PROJECT_ID=FIREBASE_PROJECT_ID:latest \
-  --set-secrets FIREBASE_CLIENT_EMAIL=FIREBASE_CLIENT_EMAIL:latest \
-  --set-secrets FIREBASE_PRIVATE_KEY=FIREBASE_PRIVATE_KEY:latest \
-  --set-secrets FIREBASE_STORAGE_BUCKET=FIREBASE_STORAGE_BUCKET:latest \
+  --service-account ${SA} \
+  --set-env-vars FIREBASE_PROJECT_ID=${PROJECT} \
+  --set-env-vars FIREBASE_STORAGE_BUCKET=${PROJECT}-timothy \
   --allow-unauthenticated
 ```
+
+手順5でサービスアカウントキーをシークレット登録した場合は、上記に加えて
+`--set-secrets FIREBASE_CLIENT_EMAIL=FIREBASE_CLIENT_EMAIL:latest --set-secrets FIREBASE_PRIVATE_KEY=FIREBASE_PRIVATE_KEY:latest`
+を指定してください。
 
 注: `--allow-unauthenticated` は共有URL（`/s/<id>`）をリンクを知っている人が誰でも開けるようにするために必要です。アップロード・一覧・削除エンドポイントはアプリケーションレベルのAPIキーで保護されています。
 
@@ -227,7 +236,17 @@ gcloud run deploy timothy-api \
 
 ### 7. APIキーの発行
 
-seedスクリプトを使ってFirestoreの `apiKeys` コレクションにエントリを追加します:
+seedスクリプトを使ってFirestoreの `apiKeys` コレクションにエントリを追加します。
+`gcloud auth application-default login` でローカル認証済みならキーファイルは不要です:
+
+```bash
+FIREBASE_PROJECT_ID=${PROJECT} \
+API_KEY=$(openssl rand -hex 32) \
+USER_ID=user@example.com \
+npx tsx packages/api/scripts/seed-api-key.ts
+```
+
+それ以外の場合は、手順3で作成したサービスアカウントキーを使用します:
 
 ```bash
 FIREBASE_PROJECT_ID=${PROJECT} \
