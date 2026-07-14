@@ -11,14 +11,14 @@
  * 本番Firestore (サービスアカウントキーを明示指定する場合):
  *   FIREBASE_PROJECT_ID=... FIREBASE_CLIENT_EMAIL=... FIREBASE_PRIVATE_KEY=... \
  *   tsx scripts/seed-api-key.ts
+ *
+ * (default) 以外の名前付きデータベースを使う場合は FIRESTORE_DATABASE_ID を追加で指定する。
  */
-import "../src/lib/firebase.js";
-import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import { db } from "../src/lib/firebase.js";
+import { Timestamp } from "firebase-admin/firestore";
 
 const API_KEY = process.env.API_KEY ?? "localtest";
 const USER_ID = process.env.USER_ID ?? "local@example.com";
-
-const db = getFirestore();
 
 db.collection("apiKeys").where("key", "==", API_KEY).limit(1).get().then((snapshot) => {
 	if (!snapshot.empty) {

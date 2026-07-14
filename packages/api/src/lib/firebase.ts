@@ -29,5 +29,8 @@ if (getApps().length === 0) {
   }
 }
 
-export const db = getFirestore();
+// FIRESTORE_DATABASE_ID が未設定の場合は (default) データベースを使う。
+export const db = process.env.FIRESTORE_DATABASE_ID
+  ? getFirestore(process.env.FIRESTORE_DATABASE_ID)
+  : getFirestore();
 export const storage = getStorage();
