@@ -28,6 +28,15 @@ The URL is served through your Cloud Run API, which fetches the file from privat
 
 ## Installation
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew tap todokr/homebrew-tap
+brew install timothy
+```
+
+### npm
+
 ```bash
 npm install -g timothy-cli
 ```
