@@ -36,6 +36,6 @@ export const uploadCommand = new Command("upload")
       process.exit(1);
     }
 
-    const result = await apiUpload({ html, title, description, ttlDays }, config as Required<typeof config>);
+    const result = await apiUpload({ title, description, ttlDays }, html, config as Required<typeof config>);
     process.stdout.write(`${color("✓", green, bold)} Uploaded: ${result.url}\n`);
   });
