@@ -9,7 +9,7 @@ const program = new Command();
 program
   .name("tim")
   .description("Upload LLM-generated HTML and share via time-limited URLs")
-  .version("0.0.1");
+  .version("0.1.1");
 
 program.addCommand(setupCommand);
 program.addCommand(uploadCommand);

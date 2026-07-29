@@ -17,7 +17,7 @@ export const listCommand = new Command("list")
       return;
     }
 
-    const urlW = 44;
+    const urlW = Math.max("URL".length, ...files.map((f) => f.url.length)) + 2;
     const titleW = 32;
     const dateW = 12;
     const header = `${"URL".padEnd(urlW)}${"TITLE".padEnd(titleW)}${"CREATED".padEnd(dateW)}EXPIRES`;
