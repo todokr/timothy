@@ -3,16 +3,16 @@ import { db } from "../lib/firebase.js";
 
 const HTML_FILES_COLLECTION = "htmlFiles";
 
-const app = new Hono<{ Variables: { userId: string } }>();
+const app = new Hono();
 
 app.get("/", async (c) => {
-  const userId = c.get("userId");
-
   const snapshot = await db
     .collection(HTML_FILES_COLLECTION)
-    .where("userId", "==", userId)
     .orderBy("createdAt", "desc")
     .get();
+
+  const proto = c.req.header("x-forwarded-proto") ?? "http";
+  const host = c.req.header("host") ?? "localhost";
 
   const files = snapshot.docs.map((doc) => {
     const data = doc.data();
@@ -20,6 +20,7 @@ app.get("/", async (c) => {
       id: doc.id,
       title: data.title,
       description: data.description,
+      url: `${proto}://${host}/s/${doc.id}`,
       expiresAt: data.expiresAt.toDate().toISOString(),
       createdAt: data.createdAt.toDate().toISOString(),
     };

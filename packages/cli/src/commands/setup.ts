@@ -14,13 +14,13 @@ function prompt(question: string): Promise<string> {
 }
 
 export const setupCommand = new Command("setup")
-  .description("Save API key and endpoint to ~/.config/timothy/config.json")
+  .description("Save API endpoint to ~/.config/timothy/config.json")
   .action(async () => {
-    const apiKey = await prompt("API key: ");
-    const apiEndpoint = await prompt("API endpoint [https://api.timothy.example.com]: ");
-    await writeConfig({
-      apiKey,
-      apiEndpoint: apiEndpoint || "https://api.timothy.example.com",
-    });
-    process.stdout.write(`${color("✓", green, bold)} Saved credentials`);
+    const apiEndpoint = await prompt("API endpoint: ");
+    if (!apiEndpoint) {
+      process.stderr.write("Error: API endpoint is required\n");
+      process.exit(1);
+    }
+    await writeConfig({ apiEndpoint });
+    process.stdout.write(`${color("✓", green, bold)} Saved config\n`);
   });

@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { Hono } from "hono";
 import app, { parseUploadRequest } from "./upload.js";
 
 vi.mock("../lib/firebase.js", () => ({
@@ -21,8 +20,6 @@ import { db } from "../lib/firebase.js";
 import { generateSignedUploadUrl } from "../lib/storage.js";
 import { now } from "../lib/time.js";
 
-const mockUserId = "user-123";
-
 function makeRequest(body: unknown) {
   return new Request("http://localhost/", {
     method: "POST",
@@ -31,17 +28,6 @@ function makeRequest(body: unknown) {
   });
 }
 
-function makeWrapperApp() {
-  const wrapper = new Hono<{ Variables: { userId: string } }>();
-  wrapper.use("/*", async (c, next) => {
-    c.set("userId", mockUserId);
-    await next();
-  });
-  wrapper.route("/", app);
-  return wrapper;
-}
-
-// For validation tests, userId is irrelevant — validation fails before it's used
 function fetchDirect(req: Request) {
   return app.fetch(req);
 }
@@ -140,9 +126,8 @@ describe("POST /upload", () => {
 
   it("generates signed upload URL and returns metadata on success", async () => {
     const validBody = { title: "Monthly Report", description: "Details", ttlDays: 7 };
-    const wrapper = makeWrapperApp();
 
-    const res = await wrapper.fetch(makeRequest(validBody));
+    const res = await fetchDirect(makeRequest(validBody));
     expect(res.status).toBe(200);
     const json = await res.json() as {
       id: string;
@@ -158,27 +143,26 @@ describe("POST /upload", () => {
     expect(json.url).toMatch(/^https?:\/\/[^/]+\/s\//);
     expect(json).toHaveProperty("expiresAt");
 
-    const expectedPath = `timothy-files/${mockUserId}/${json.id}.html`;
+    const expectedPath = `timothy-files/${json.id}.html`;
     expect(generateSignedUploadUrl).toHaveBeenCalledWith(expectedPath);
     expect(db.collection).toHaveBeenCalledWith("htmlFiles");
   });
 
-  it("saves correct metadata to Firestore", async () => {
+  it("saves correct metadata to Firestore (without userId)", async () => {
     const validBody = { title: "Title", description: "Desc", ttlDays: 3 };
 
     const setMock = vi.fn().mockResolvedValue(undefined);
     const collectionMock = { doc: vi.fn().mockReturnValue({ set: setMock }) };
     vi.mocked(db.collection).mockReturnValue(collectionMock as unknown as ReturnType<typeof db.collection>);
 
-    const wrapper = makeWrapperApp();
     const before = now();
-    const res = await wrapper.fetch(makeRequest(validBody));
+    const res = await fetchDirect(makeRequest(validBody));
 
     expect(res.status).toBe(200);
     expect(setMock).toHaveBeenCalledOnce();
 
     const savedData = setMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(savedData.userId).toBe(mockUserId);
+    expect(savedData).not.toHaveProperty("userId");
     expect(savedData.title).toBe(validBody.title);
     expect(savedData.description).toBe(validBody.description);
     expect(savedData.expiresAt).toBeInstanceOf(Date);
@@ -191,8 +175,7 @@ describe("POST /upload", () => {
 
   it("returns 5xx when generateSignedUploadUrl throws", async () => {
     vi.mocked(generateSignedUploadUrl).mockRejectedValue(new Error("Storage error"));
-    const wrapper = makeWrapperApp();
-    const res = await wrapper.fetch(
+    const res = await fetchDirect(
       makeRequest({ title: "T", description: "D", ttlDays: 1 })
     );
     expect(res.status).toBeGreaterThanOrEqual(500);
@@ -203,8 +186,7 @@ describe("POST /upload", () => {
     const collectionMock = { doc: vi.fn().mockReturnValue({ set: setMock }) };
     vi.mocked(db.collection).mockReturnValue(collectionMock as unknown as ReturnType<typeof db.collection>);
 
-    const wrapper = makeWrapperApp();
-    const res = await wrapper.fetch(
+    const res = await fetchDirect(
       makeRequest({ title: "T", description: "D", ttlDays: 1 })
     );
     expect(res.status).toBeGreaterThanOrEqual(500);

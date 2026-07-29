@@ -19,7 +19,7 @@ export const deleteCommand = new Command("delete")
   .option("--force", "Skip confirmation prompt")
   .action(async (id: string, options: { force?: boolean }) => {
     const config = await readConfig();
-    if (!config.apiKey || !config.apiEndpoint) {
+    if (!config.apiEndpoint) {
       process.stderr.write("Error: run `tim setup` first\n");
       process.exit(1);
     }

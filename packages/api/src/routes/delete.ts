@@ -4,10 +4,9 @@ import { deleteFile } from "../lib/storage.js";
 
 const HTML_FILES_COLLECTION = "htmlFiles";
 
-const app = new Hono<{ Variables: { userId: string } }>();
+const app = new Hono();
 
 app.delete("/:id", async (c) => {
-  const userId = c.get("userId");
   const id = c.req.param("id");
 
   const docRef = db.collection(HTML_FILES_COLLECTION).doc(id);
@@ -18,10 +17,6 @@ app.delete("/:id", async (c) => {
   }
 
   const data = doc.data()!;
-  if (data.userId !== userId) {
-    return c.json({ error: "Not Found" }, 404);
-  }
-
   await deleteFile(data.storagePath);
   await docRef.delete();
 

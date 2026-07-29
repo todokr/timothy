@@ -31,7 +31,7 @@ export const uploadCommand = new Command("upload")
     const ttlDays = parseInt(opts.ttl, 10);
 
     const config = await readConfig();
-    if (!config.apiKey || !config.apiEndpoint) {
+    if (!config.apiEndpoint) {
       process.stderr.write("Error: run `tim setup` first\n");
       process.exit(1);
     }
