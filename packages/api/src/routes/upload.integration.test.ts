@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+import { describe, it, expect, afterAll, vi } from "vitest";
 
 // V4 signed URL generation requires real GCP credentials even against the Storage emulator.
 // Stub it out; upload happens via the returned URL which we don't exercise here.
@@ -16,16 +16,11 @@ import { getBucket } from "../lib/storage.js";
 import { epochMills } from "../lib/time.js";
 
 // Requires: firebase emulators:start --only firestore,storage
-const TEST_API_KEY = "integration-test-key";
-const TEST_USER_ID = "integration-test-user";
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/upload", {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${TEST_API_KEY}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
 }
@@ -37,51 +32,16 @@ const validBody = {
 };
 
 describe("POST /upload (integration)", () => {
-  let keyDocId: string;
   const createdDocIds: string[] = [];
 
-  beforeAll(async () => {
-    const ref = await db.collection("apiKeys").add({
-      key: TEST_API_KEY,
-      userId: TEST_USER_ID,
-    });
-    keyDocId = ref.id;
-  });
-
   afterAll(async () => {
-    await db.collection("apiKeys").doc(keyDocId).delete();
     await Promise.all(
       createdDocIds.map(async (id) => {
         await db.collection("htmlFiles").doc(id).delete().catch(() => {});
-        const file = getBucket().file(`timothy-files/${TEST_USER_ID}/${id}.html`);
+        const file = getBucket().file(`timothy-files/${id}.html`);
         await file.delete().catch(() => {});
       })
     );
-  });
-
-  it("returns 401 without Authorization header", async () => {
-    const res = await app.fetch(
-      new Request("http://localhost/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validBody),
-      })
-    );
-    expect(res.status).toBe(401);
-  });
-
-  it("returns 401 with invalid API key", async () => {
-    const res = await app.fetch(
-      new Request("http://localhost/upload", {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer wrong-key",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(validBody),
-      })
-    );
-    expect(res.status).toBe(401);
   });
 
   it("returns 400 for missing required fields", async () => {
@@ -95,10 +55,7 @@ describe("POST /upload (integration)", () => {
     const res = await app.fetch(
       new Request("http://localhost/upload", {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${TEST_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: "not-json",
       })
     );
@@ -128,12 +85,10 @@ describe("POST /upload (integration)", () => {
     const doc = await db.collection("htmlFiles").doc(json.id).get();
     expect(doc.exists).toBe(true);
     const data = doc.data()!;
-    expect(data.userId).toBe(TEST_USER_ID);
+    expect(data).not.toHaveProperty("userId");
     expect(data.title).toBe(validBody.title);
     expect(data.description).toBe(validBody.description);
-    expect(data.storagePath).toBe(
-      `timothy-files/${TEST_USER_ID}/${json.id}.html`
-    );
+    expect(data.storagePath).toBe(`timothy-files/${json.id}.html`);
     expect(data.expiresAt.toDate()).toBeInstanceOf(Date);
     expect(data.createdAt.toDate()).toBeInstanceOf(Date);
   });

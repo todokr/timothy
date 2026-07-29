@@ -6,7 +6,7 @@ export const listCommand = new Command("list")
   .description("List uploaded files")
   .action(async () => {
     const config = await readConfig();
-    if (!config.apiKey || !config.apiEndpoint) {
+    if (!config.apiEndpoint) {
       process.stderr.write("Error: run `tim setup` first\n");
       process.exit(1);
     }
@@ -17,15 +17,16 @@ export const listCommand = new Command("list")
       return;
     }
 
-    const idW = 27;
-    const titleW = 24;
+    const urlW = 44;
+    const titleW = 32;
     const dateW = 12;
-    const header = `${"ID".padEnd(idW)}${"TITLE".padEnd(titleW)}${"CREATED".padEnd(dateW)}EXPIRES`;
+    const header = `${"URL".padEnd(urlW)}${"TITLE".padEnd(titleW)}${"CREATED".padEnd(dateW)}EXPIRES`;
     process.stdout.write(`${header}\n`);
     for (const f of files) {
       const created = f.createdAt.slice(0, 10);
       const expires = f.expiresAt.slice(0, 10);
-      const row = `${f.id.padEnd(idW)}${f.title.padEnd(titleW)}${created.padEnd(dateW)}${expires}`;
+      const title = f.title.length > titleW - 2 ? `${f.title.slice(0, titleW - 3)}…` : f.title;
+      const row = `${f.url.padEnd(urlW)}${title.padEnd(titleW)}${created.padEnd(dateW)}${expires}`;
       process.stdout.write(`${row}\n`);
     }
   });

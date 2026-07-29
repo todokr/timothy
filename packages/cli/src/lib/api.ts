@@ -23,16 +23,14 @@ export type UploadResponse = {
 export type FileEntry = {
   id: string;
   title: string;
+  url: string;
   createdAt: string;
   expiresAt: string;
 };
 
-function authHeaders(apiKey: string): Record<string, string> {
-  return {
-    "Authorization": `Bearer ${apiKey}`,
-    "Content-Type": "application/json",
-  };
-}
+const jsonHeaders: Record<string, string> = {
+  "Content-Type": "application/json",
+};
 
 async function assertOk(res: Response): Promise<void> {
   if (!res.ok) {
@@ -48,7 +46,7 @@ export async function apiUpload(
 ): Promise<UploadResponse> {
   const initRes = await fetch(`${config.apiEndpoint}/upload`, {
     method: "POST",
-    headers: authHeaders(config.apiKey),
+    headers: jsonHeaders,
     body: JSON.stringify(payload),
   });
   await assertOk(initRes);
@@ -68,18 +66,15 @@ export async function apiUpload(
 }
 
 export async function apiList(config: Config): Promise<FileEntry[]> {
-  const res = await fetch(`${config.apiEndpoint}/files`, {
-    headers: authHeaders(config.apiKey),
-  });
+  const res = await fetch(`${config.apiEndpoint}/files`);
   await assertOk(res);
-  const { files } = await res.json() as { files: FileEntry[] };
+  const { files } = (await res.json()) as { files: FileEntry[] };
   return files;
 }
 
 export async function apiDelete(id: string, config: Config): Promise<void> {
   const res = await fetch(`${config.apiEndpoint}/files/${id}`, {
     method: "DELETE",
-    headers: authHeaders(config.apiKey),
   });
   await assertOk(res);
 }

@@ -3,7 +3,6 @@ import { homedir } from "os";
 import { dirname, join } from "path";
 
 export type Config = {
-  apiKey: string;
   apiEndpoint: string;
 };
 

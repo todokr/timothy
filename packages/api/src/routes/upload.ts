@@ -41,11 +41,9 @@ export function parseUploadRequest(body: unknown): ParseResult {
   return { ok: true, data: { title, description, ttlDays } };
 }
 
-const app = new Hono<{ Variables: { userId: string } }>();
+const app = new Hono();
 
 app.post("/", async (c) => {
-  const userId = c.get("userId");
-
   let body: unknown;
   try {
     body = await c.req.json();
@@ -60,7 +58,7 @@ app.post("/", async (c) => {
   const { title, description, ttlDays } = parsed.data;
 
   const id = ulid();
-  const storagePath = `${STORAGE_BASE_PATH}/${userId}/${id}.html`;
+  const storagePath = `${STORAGE_BASE_PATH}/${id}.html`;
   const expiresAt = addSeconds(now(), ttlDays * 24 * 60 * 60);
 
   const uploadUrl = await generateSignedUploadUrl(storagePath);
@@ -70,7 +68,6 @@ app.post("/", async (c) => {
   const url = `${proto}://${host}/s/${id}`;
 
   await db.collection(HTML_FILES_COLLECTION).doc(id).set({
-    userId,
     title,
     description,
     storagePath,

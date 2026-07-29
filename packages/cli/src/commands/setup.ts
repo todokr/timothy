@@ -13,14 +13,14 @@ function prompt(question: string): Promise<string> {
   });
 }
 
+const DEFAULT_ENDPOINT = "https://timothy-api.pooh.dev";
+
 export const setupCommand = new Command("setup")
-  .description("Save API key and endpoint to ~/.config/timothy/config.json")
+  .description("Save API endpoint to ~/.config/timothy/config.json")
   .action(async () => {
-    const apiKey = await prompt("API key: ");
-    const apiEndpoint = await prompt("API endpoint [https://api.timothy.example.com]: ");
+    const apiEndpoint = await prompt(`API endpoint [${DEFAULT_ENDPOINT}]: `);
     await writeConfig({
-      apiKey,
-      apiEndpoint: apiEndpoint || "https://api.timothy.example.com",
+      apiEndpoint: apiEndpoint || DEFAULT_ENDPOINT,
     });
-    process.stdout.write(`${color("✓", green, bold)} Saved credentials`);
+    process.stdout.write(`${color("✓", green, bold)} Saved config\n`);
   });
