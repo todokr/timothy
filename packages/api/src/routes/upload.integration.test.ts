@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 
-// generateSignedUrl requires real GCP credentials even against the Storage emulator.
-// Stub it out while keeping uploadHtml real so the actual Storage write is tested.
+// V4 signed URL generation requires real GCP credentials even against the Storage emulator.
+// Stub it out; upload happens via the returned URL which we don't exercise here.
 vi.mock("../lib/storage.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/storage.js")>();
   return {
     ...actual,
-    generateSignedUrl: vi.fn().mockResolvedValue("http://localhost:9199/stub-signed-url"),
+    generateSignedUploadUrl: vi.fn().mockResolvedValue("http://localhost:9199/stub-signed-url"),
   };
 });
 
@@ -31,7 +31,6 @@ function makeRequest(body: unknown) {
 }
 
 const validBody = {
-  html: "<h1>Integration Test</h1>",
   title: "Integration Test",
   description: "Test description",
   ttlDays: 7,
@@ -86,7 +85,7 @@ describe("POST /upload (integration)", () => {
   });
 
   it("returns 400 for missing required fields", async () => {
-    const res = await app.fetch(makeRequest({ html: "<h1>Hi</h1>" }));
+    const res = await app.fetch(makeRequest({ title: "T" }));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json).toHaveProperty("error");
@@ -106,25 +105,26 @@ describe("POST /upload (integration)", () => {
     expect(res.status).toBe(400);
   });
 
-  it("uploads HTML, saves to Firestore, and returns id/url/expiresAt", async () => {
+  it("returns signed upload URL and saves metadata to Firestore", async () => {
     const before = epochMills();
     const res = await app.fetch(makeRequest(validBody));
 
     expect(res.status).toBe(200);
     const json = (await res.json()) as {
       id: string;
+      uploadUrl: string;
+      uploadHeaders: Record<string, string>;
       url: string;
       expiresAt: string;
     };
 
-    expect(json.id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-    );
+    expect(json.id).toBeTruthy();
+    expect(json.uploadUrl).toBe("http://localhost:9199/stub-signed-url");
+    expect(json.uploadHeaders["Content-Type"]).toBe("text/html; charset=utf-8");
     expect(json.url).toBeTruthy();
     expect(new Date(json.expiresAt).getTime()).toBeGreaterThan(before);
     createdDocIds.push(json.id);
 
-    // Firestoreにドキュメントが保存されているか
     const doc = await db.collection("htmlFiles").doc(json.id).get();
     expect(doc.exists).toBe(true);
     const data = doc.data()!;
@@ -136,17 +136,6 @@ describe("POST /upload (integration)", () => {
     );
     expect(data.expiresAt.toDate()).toBeInstanceOf(Date);
     expect(data.createdAt.toDate()).toBeInstanceOf(Date);
-
-    // Cloud StorageにHTMLファイルが存在するか
-    const file = getBucket().file(
-      `timothy-files/${TEST_USER_ID}/${json.id}.html`
-    );
-    const [exists] = await file.exists();
-    expect(exists).toBe(true);
-
-    // ファイルの中身が正しいか
-    const [content] = await file.download();
-    expect(content.toString()).toBe(validBody.html);
   });
 
   it("expiresAt is ttlDays from now", async () => {

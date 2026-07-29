@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { db } from "../lib/firebase.js";
-import { uploadHtml } from "../lib/storage.js";
+import { UPLOAD_CONTENT_TYPE, generateSignedUploadUrl } from "../lib/storage.js";
 import { ulid } from "ulid";
 import { addSeconds, now } from "../lib/time.js";
 
@@ -8,7 +8,6 @@ const STORAGE_BASE_PATH = "timothy-files";
 const HTML_FILES_COLLECTION = "htmlFiles";
 
 type UploadInput = {
-  html: string;
   title: string;
   description: string;
   ttlDays: number;
@@ -20,19 +19,15 @@ export function parseUploadRequest(body: unknown): ParseResult {
   if (
     typeof body !== "object" ||
     body === null ||
-    !("html" in body) ||
     !("title" in body) ||
     !("description" in body) ||
     !("ttlDays" in body)
   ) {
-    return { ok: false, error: "Missing required fields: html, title, description, ttlDays" };
+    return { ok: false, error: "Missing required fields: title, description, ttlDays" };
   }
 
-  const { html, title, description, ttlDays } = body as Record<string, unknown>;
+  const { title, description, ttlDays } = body as Record<string, unknown>;
 
-  if (typeof html !== "string" || html.length === 0) {
-    return { ok: false, error: "html must be a non-empty string" };
-  }
   if (typeof title !== "string" || title.length === 0) {
     return { ok: false, error: "title must be a non-empty string" };
   }
@@ -43,7 +38,7 @@ export function parseUploadRequest(body: unknown): ParseResult {
     return { ok: false, error: "ttlDays must be a positive integer" };
   }
 
-  return { ok: true, data: { html, title, description, ttlDays } };
+  return { ok: true, data: { title, description, ttlDays } };
 }
 
 const app = new Hono<{ Variables: { userId: string } }>();
@@ -62,13 +57,13 @@ app.post("/", async (c) => {
   if (!parsed.ok) {
     return c.json({ error: parsed.error }, 400);
   }
-  const { html, title, description, ttlDays } = parsed.data;
+  const { title, description, ttlDays } = parsed.data;
 
   const id = ulid();
   const storagePath = `${STORAGE_BASE_PATH}/${userId}/${id}.html`;
   const expiresAt = addSeconds(now(), ttlDays * 24 * 60 * 60);
 
-  await uploadHtml(storagePath, html);
+  const uploadUrl = await generateSignedUploadUrl(storagePath);
 
   const proto = c.req.header("x-forwarded-proto") ?? "http";
   const host = c.req.header("host") ?? "localhost";
@@ -83,7 +78,13 @@ app.post("/", async (c) => {
     createdAt: now(),
   });
 
-  return c.json({ id, url, expiresAt: expiresAt.toISOString() });
+  return c.json({
+    id,
+    uploadUrl,
+    uploadHeaders: { "Content-Type": UPLOAD_CONTENT_TYPE },
+    url,
+    expiresAt: expiresAt.toISOString(),
+  });
 });
 
 export default app;

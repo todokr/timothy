@@ -13,11 +13,12 @@ vi.mock("../lib/firebase.js", () => ({
 }));
 
 vi.mock("../lib/storage.js", () => ({
-  uploadHtml: vi.fn().mockResolvedValue(undefined),
+  UPLOAD_CONTENT_TYPE: "text/html; charset=utf-8",
+  generateSignedUploadUrl: vi.fn().mockResolvedValue("https://storage.googleapis.com/mock-signed-url"),
 }));
 
 import { db } from "../lib/firebase.js";
-import { uploadHtml } from "../lib/storage.js";
+import { generateSignedUploadUrl } from "../lib/storage.js";
 import { now } from "../lib/time.js";
 
 const mockUserId = "user-123";
@@ -47,33 +48,28 @@ function fetchDirect(req: Request) {
 
 describe("parseUploadRequest", () => {
   it("returns ok:true for valid input", () => {
-    const result = parseUploadRequest({ html: "<h1>Hi</h1>", title: "T", description: "D", ttlDays: 1 });
+    const result = parseUploadRequest({ title: "T", description: "D", ttlDays: 1 });
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.data).toEqual({ html: "<h1>Hi</h1>", title: "T", description: "D", ttlDays: 1 });
+      expect(result.data).toEqual({ title: "T", description: "D", ttlDays: 1 });
     }
   });
 
   it("returns ok:false when required fields are missing", () => {
-    const result = parseUploadRequest({ html: "<h1>Hi</h1>" });
+    const result = parseUploadRequest({ title: "T" });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toMatch(/Missing required fields/);
     }
   });
 
-  it("returns ok:false when html is empty", () => {
-    const result = parseUploadRequest({ html: "", title: "T", description: "D", ttlDays: 1 });
-    expect(result.ok).toBe(false);
-  });
-
   it("returns ok:false when title is empty", () => {
-    const result = parseUploadRequest({ html: "<h1>Hi</h1>", title: "", description: "D", ttlDays: 1 });
+    const result = parseUploadRequest({ title: "", description: "D", ttlDays: 1 });
     expect(result.ok).toBe(false);
   });
 
   it("returns ok:false when description is not a string", () => {
-    const result = parseUploadRequest({ html: "<h1>Hi</h1>", title: "T", description: 123, ttlDays: 1 });
+    const result = parseUploadRequest({ title: "T", description: 123, ttlDays: 1 });
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toMatch(/description/);
@@ -81,12 +77,12 @@ describe("parseUploadRequest", () => {
   });
 
   it("returns ok:false when ttlDays is not a positive integer", () => {
-    const result = parseUploadRequest({ html: "<h1>Hi</h1>", title: "T", description: "D", ttlDays: -1 });
+    const result = parseUploadRequest({ title: "T", description: "D", ttlDays: -1 });
     expect(result.ok).toBe(false);
   });
 
   it("returns ok:false when ttlDays is a float", () => {
-    const result = parseUploadRequest({ html: "<h1>Hi</h1>", title: "T", description: "D", ttlDays: 1.5 });
+    const result = parseUploadRequest({ title: "T", description: "D", ttlDays: 1.5 });
     expect(result.ok).toBe(false);
   });
 
@@ -99,41 +95,36 @@ describe("parseUploadRequest", () => {
 describe("POST /upload", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(uploadHtml).mockResolvedValue(undefined);
+    vi.mocked(generateSignedUploadUrl).mockResolvedValue("https://storage.googleapis.com/mock-signed-url");
     const docMock = { set: vi.fn().mockResolvedValue(undefined) };
     const collectionMock = { doc: vi.fn().mockReturnValue(docMock) };
     vi.mocked(db.collection).mockReturnValue(collectionMock as unknown as ReturnType<typeof db.collection>);
   });
 
   it("returns 400 when body is missing required fields", async () => {
-    const res = await fetchDirect(makeRequest({ html: "<h1>Hello</h1>" }));
+    const res = await fetchDirect(makeRequest({ title: "T" }));
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json).toHaveProperty("error");
   });
 
-  it("returns 400 when html is empty string", async () => {
-    const res = await fetchDirect(makeRequest({ html: "", title: "Test", description: "desc", ttlDays: 7 }));
-    expect(res.status).toBe(400);
-  });
-
   it("returns 400 when title is empty string", async () => {
-    const res = await fetchDirect(makeRequest({ html: "<h1>Hello</h1>", title: "", description: "desc", ttlDays: 7 }));
+    const res = await fetchDirect(makeRequest({ title: "", description: "desc", ttlDays: 7 }));
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when description is not a string", async () => {
-    const res = await fetchDirect(makeRequest({ html: "<h1>Hello</h1>", title: "Test", description: 123, ttlDays: 7 }));
+    const res = await fetchDirect(makeRequest({ title: "Test", description: 123, ttlDays: 7 }));
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when ttlDays is not a positive integer", async () => {
-    const res = await fetchDirect(makeRequest({ html: "<h1>Hi</h1>", title: "Test", description: "desc", ttlDays: -1 }));
+    const res = await fetchDirect(makeRequest({ title: "Test", description: "desc", ttlDays: -1 }));
     expect(res.status).toBe(400);
   });
 
   it("returns 400 when ttlDays is a float", async () => {
-    const res = await fetchDirect(makeRequest({ html: "<h1>Hi</h1>", title: "Test", description: "desc", ttlDays: 1.5 }));
+    const res = await fetchDirect(makeRequest({ title: "Test", description: "desc", ttlDays: 1.5 }));
     expect(res.status).toBe(400);
   });
 
@@ -147,25 +138,33 @@ describe("POST /upload", () => {
     expect(res.status).toBe(400);
   });
 
-  it("uploads to correct storage path and returns response on success", async () => {
-    const validBody = { html: "<h1>Hello</h1>", title: "Monthly Report", description: "Details", ttlDays: 7 };
+  it("generates signed upload URL and returns metadata on success", async () => {
+    const validBody = { title: "Monthly Report", description: "Details", ttlDays: 7 };
     const wrapper = makeWrapperApp();
 
     const res = await wrapper.fetch(makeRequest(validBody));
     expect(res.status).toBe(200);
-    const json = await res.json() as { id: string; url: string; expiresAt: string };
+    const json = await res.json() as {
+      id: string;
+      uploadUrl: string;
+      uploadHeaders: Record<string, string>;
+      url: string;
+      expiresAt: string;
+    };
 
     expect(json).toHaveProperty("id");
+    expect(json.uploadUrl).toBe("https://storage.googleapis.com/mock-signed-url");
+    expect(json.uploadHeaders["Content-Type"]).toBe("text/html; charset=utf-8");
     expect(json.url).toMatch(/^https?:\/\/[^/]+\/s\//);
     expect(json).toHaveProperty("expiresAt");
 
     const expectedPath = `timothy-files/${mockUserId}/${json.id}.html`;
-    expect(uploadHtml).toHaveBeenCalledWith(expectedPath, validBody.html);
+    expect(generateSignedUploadUrl).toHaveBeenCalledWith(expectedPath);
     expect(db.collection).toHaveBeenCalledWith("htmlFiles");
   });
 
   it("saves correct metadata to Firestore", async () => {
-    const validBody = { html: "<p>Content</p>", title: "Title", description: "Desc", ttlDays: 3 };
+    const validBody = { title: "Title", description: "Desc", ttlDays: 3 };
 
     const setMock = vi.fn().mockResolvedValue(undefined);
     const collectionMock = { doc: vi.fn().mockReturnValue({ set: setMock }) };
@@ -190,11 +189,11 @@ describe("POST /upload", () => {
     expect(diffDays).toBe(validBody.ttlDays);
   });
 
-  it("returns 5xx when uploadHtml throws", async () => {
-    vi.mocked(uploadHtml).mockRejectedValue(new Error("Storage error"));
+  it("returns 5xx when generateSignedUploadUrl throws", async () => {
+    vi.mocked(generateSignedUploadUrl).mockRejectedValue(new Error("Storage error"));
     const wrapper = makeWrapperApp();
     const res = await wrapper.fetch(
-      makeRequest({ html: "<h1>Hi</h1>", title: "T", description: "D", ttlDays: 1 })
+      makeRequest({ title: "T", description: "D", ttlDays: 1 })
     );
     expect(res.status).toBeGreaterThanOrEqual(500);
   });
@@ -206,7 +205,7 @@ describe("POST /upload", () => {
 
     const wrapper = makeWrapperApp();
     const res = await wrapper.fetch(
-      makeRequest({ html: "<h1>Hi</h1>", title: "T", description: "D", ttlDays: 1 })
+      makeRequest({ title: "T", description: "D", ttlDays: 1 })
     );
     expect(res.status).toBeGreaterThanOrEqual(500);
   });

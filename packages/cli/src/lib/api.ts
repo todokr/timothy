@@ -1,10 +1,17 @@
 import type { Config } from "./config.js";
 
 export type UploadPayload = {
-  html: string;
   title: string;
   description: string;
   ttlDays: number;
+};
+
+export type UploadInitResponse = {
+  id: string;
+  uploadUrl: string;
+  uploadHeaders: Record<string, string>;
+  url: string;
+  expiresAt: string;
 };
 
 export type UploadResponse = {
@@ -34,14 +41,30 @@ async function assertOk(res: Response): Promise<void> {
   }
 }
 
-export async function apiUpload(payload: UploadPayload, config: Config): Promise<UploadResponse> {
-  const res = await fetch(`${config.apiEndpoint}/upload`, {
+export async function apiUpload(
+  payload: UploadPayload,
+  html: string,
+  config: Config
+): Promise<UploadResponse> {
+  const initRes = await fetch(`${config.apiEndpoint}/upload`, {
     method: "POST",
     headers: authHeaders(config.apiKey),
     body: JSON.stringify(payload),
   });
-  await assertOk(res);
-  return res.json() as Promise<UploadResponse>;
+  await assertOk(initRes);
+  const init = (await initRes.json()) as UploadInitResponse;
+
+  const putRes = await fetch(init.uploadUrl, {
+    method: "PUT",
+    headers: init.uploadHeaders,
+    body: html,
+  });
+  if (!putRes.ok) {
+    const body = await putRes.text().catch(() => "");
+    throw new Error(`Storage upload failed ${putRes.status}: ${body}`);
+  }
+
+  return { id: init.id, url: init.url, expiresAt: init.expiresAt };
 }
 
 export async function apiList(config: Config): Promise<FileEntry[]> {

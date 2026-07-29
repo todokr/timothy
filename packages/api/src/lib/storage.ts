@@ -14,6 +14,23 @@ export async function uploadHtml(
   await file.save(html, { contentType: "text/html; charset=utf-8" });
 }
 
+export const UPLOAD_CONTENT_TYPE = "text/html; charset=utf-8";
+
+const UPLOAD_URL_TTL_MS = 15 * 60 * 1000;
+
+export async function generateSignedUploadUrl(
+  storagePath: string
+): Promise<string> {
+  const bucket = getBucket();
+  const [url] = await bucket.file(storagePath).getSignedUrl({
+    version: "v4",
+    action: "write",
+    expires: Date.now() + UPLOAD_URL_TTL_MS,
+    contentType: UPLOAD_CONTENT_TYPE,
+  });
+  return url;
+}
+
 export async function getFileContent(storagePath: string): Promise<string> {
   const bucket = getBucket();
   const [contents] = await bucket.file(storagePath).download();
