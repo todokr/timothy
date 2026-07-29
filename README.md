@@ -31,8 +31,7 @@ The URL is served through your Cloud Run API, which fetches the file from privat
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew tap todokr/homebrew-tap
-brew install timothy
+brew install todokr/tap/timothy
 ```
 
 ### npm
@@ -55,7 +54,6 @@ Save your API key and endpoint:
 
 ```bash
 tim setup
-# API key: xxxxxxxxxxxxxxxxxxxx
 # API endpoint [https://api.timothy.example.com]: https://your-api.example.com
 ```
 
