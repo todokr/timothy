@@ -1,8 +1,19 @@
 import { Hono } from "hono";
-import { css, Style } from "hono/css";
+import { Style } from "hono/css";
 import { raw } from "hono/html";
 import { listFiles, resolveBaseUrl, type FileEntry } from "../lib/files.js";
 import { CLIENT_SCRIPT } from "./webScript.js";
+import {
+  bodyClass,
+  containerClass,
+  tableClass,
+  badgeClass,
+  formClass,
+  dropZoneClass,
+  errorBoxClass,
+  emptyClass,
+  errorPageClass,
+} from "./webStyles.js";
 
 const JST_FORMATTER = new Intl.DateTimeFormat("sv-SE", {
   timeZone: "Asia/Tokyo",
@@ -20,131 +31,6 @@ export function formatJst(iso: string): string {
 export function isExpired(iso: string, nowMs: number): boolean {
   return Date.parse(iso) < nowMs;
 }
-
-const bodyClass = css`
-  margin: 0;
-  padding: 2rem 1.5rem 4rem;
-  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
-  color: #1f2933;
-  background: #f7f8fa;
-`;
-
-const containerClass = css`
-  max-width: 60rem;
-  margin: 0 auto;
-`;
-
-const tableClass = css`
-  width: 100%;
-  border-collapse: collapse;
-  background: #fff;
-  border: 1px solid #e2e6eb;
-  border-radius: 8px;
-  overflow: hidden;
-
-  th,
-  td {
-    padding: 0.6rem 0.75rem;
-    text-align: left;
-    border-bottom: 1px solid #eef1f4;
-    font-size: 0.875rem;
-    vertical-align: top;
-  }
-
-  th {
-    background: #f2f4f7;
-    font-weight: 600;
-  }
-
-  tr:last-child td {
-    border-bottom: none;
-  }
-
-  tr[data-expired="true"] {
-    color: #9aa5b1;
-  }
-`;
-
-const badgeClass = css`
-  display: inline-block;
-  padding: 0.1rem 0.4rem;
-  margin-left: 0.4rem;
-  font-size: 0.75rem;
-  border-radius: 4px;
-  background: #fde2e2;
-  color: #a61b1b;
-`;
-
-const formClass = css`
-  margin-bottom: 2rem;
-  padding: 1.25rem;
-  background: #fff;
-  border: 1px solid #e2e6eb;
-  border-radius: 8px;
-
-  label {
-    display: block;
-    margin-bottom: 0.75rem;
-    font-size: 0.875rem;
-    font-weight: 600;
-  }
-
-  input[type="text"],
-  input[type="number"] {
-    display: block;
-    width: 100%;
-    max-width: 24rem;
-    margin-top: 0.25rem;
-    padding: 0.4rem 0.5rem;
-    font: inherit;
-    font-weight: 400;
-    border: 1px solid #cbd2d9;
-    border-radius: 4px;
-  }
-`;
-
-const dropZoneClass = css`
-  margin-bottom: 1rem;
-  padding: 1.5rem;
-  text-align: center;
-  color: #7b8794;
-  border: 2px dashed #cbd2d9;
-  border-radius: 8px;
-
-  &[data-dragging="true"] {
-    border-color: #2f80ed;
-    background: #eef5fe;
-    color: #2f80ed;
-  }
-`;
-
-const errorBoxClass = css`
-  margin: 0 0 1rem;
-  padding: 0.6rem 0.75rem;
-  font-size: 0.875rem;
-  color: #a61b1b;
-  background: #fde2e2;
-  border-radius: 4px;
-
-  &[hidden] {
-    display: none;
-  }
-`;
-
-const emptyClass = css`
-  padding: 3rem 1rem;
-  text-align: center;
-  color: #7b8794;
-  background: #fff;
-  border: 1px solid #e2e6eb;
-  border-radius: 8px;
-`;
-
-const errorPageClass = css`
-  padding: 3rem 1rem;
-  text-align: center;
-  color: #a61b1b;
-`;
 
 // hono の c.html は doctype を付けないため、明示的に先頭へ出力して
 // ブラウザが互換モード (quirks mode) で描画するのを防ぐ。
