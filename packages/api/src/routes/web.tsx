@@ -18,7 +18,13 @@ import {
   submitButtonClass,
   errorBoxClass,
   emptyClass,
+  emptyTitleClass,
   errorPageClass,
+  rowNumberClass,
+  urlClass,
+  ghostButtonClass,
+  dangerButtonClass,
+  rowErrorClass,
 } from "./webStyles.js";
 
 const JST_FORMATTER = new Intl.DateTimeFormat("sv-SE", {
@@ -99,13 +105,19 @@ function Layout(props: { children: unknown; withScript?: boolean }) {
 
 function FileTable(props: { files: FileEntry[]; nowMs: number }) {
   if (props.files.length === 0) {
-    return <p class={cx(emptyClass, panelClass)}>まだファイルがありません</p>;
+    return (
+      <div class={cx(emptyClass, panelClass)}>
+        <p class={emptyTitleClass}>No files</p>
+        <p>まだファイルがありません</p>
+      </div>
+    );
   }
 
   return (
     <table class={cx(tableClass, panelClass)}>
       <thead>
         <tr>
+          <th></th>
           <th>タイトル</th>
           <th>説明</th>
           <th>共有 URL</th>
@@ -115,17 +127,18 @@ function FileTable(props: { files: FileEntry[]; nowMs: number }) {
         </tr>
       </thead>
       <tbody>
-        {props.files.map((file) => {
+        {props.files.map((file, index) => {
           const expired = isExpired(file.expiresAt, props.nowMs);
           return (
             <tr key={file.id} data-expired={String(expired)}>
+              <td class={rowNumberClass}>{String(index + 1).padStart(2, "0")}</td>
               <td>{file.title}</td>
               <td>{file.description}</td>
-              <td>
+              <td class={urlClass}>
                 <a href={file.url} target="_blank" rel="noreferrer">
                   {file.url}
                 </a>
-                <button type="button" data-copy-url={file.url}>
+                <button type="button" class={ghostButtonClass} data-copy-url={file.url}>
                   コピー
                 </button>
               </td>
@@ -135,10 +148,10 @@ function FileTable(props: { files: FileEntry[]; nowMs: number }) {
               </td>
               <td>{formatJst(file.createdAt)}</td>
               <td>
-                <button type="button" data-delete-id={file.id}>
+                <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
                   削除
                 </button>
-                <span data-row-error></span>
+                <span class={rowErrorClass} data-row-error></span>
               </td>
             </tr>
           );

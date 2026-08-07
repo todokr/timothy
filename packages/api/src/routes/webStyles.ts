@@ -175,21 +175,38 @@ export const tableClass = css`
   border-collapse: collapse;
   background: var(--panel);
   border: 1px solid var(--panel-edge);
-  overflow: hidden;
 
   th,
   td {
-    padding: 0.6rem 0.75rem;
+    padding: 0.7rem 0.75rem;
     text-align: left;
     border-bottom: 1px solid var(--line);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     vertical-align: top;
   }
 
   th {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 400;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cyan);
     background: #121419;
-    font-weight: 600;
-    color: var(--text-dim);
+    border-bottom-color: var(--line-strong);
+  }
+
+  tbody tr {
+    position: relative;
+    transition: background-color 120ms linear;
+  }
+
+  tbody tr:hover {
+    background: #14090c;
+  }
+
+  tbody tr:hover td:first-child {
+    box-shadow: inset 2px 0 0 var(--accent);
   }
 
   tr:last-child td {
@@ -199,13 +216,19 @@ export const tableClass = css`
   tr[data-expired="true"] {
     color: var(--text-dim);
   }
+
+  tr[data-expired="true"] a {
+    color: #4c7275;
+  }
 `;
 
 export const badgeClass = css`
   display: inline-block;
-  padding: 0.1rem 0.4rem;
-  margin-left: 0.4rem;
-  font-size: 0.75rem;
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
   color: var(--accent);
   border: 1px solid var(--line-strong);
 `;
@@ -332,7 +355,7 @@ export const errorBoxClass = css`
 `;
 
 export const emptyClass = css`
-  padding: 3rem 1rem;
+  padding: 4rem 1rem;
   text-align: center;
   color: var(--text-dim);
   background: var(--panel);
@@ -343,4 +366,85 @@ export const errorPageClass = css`
   padding: 3rem 1rem;
   text-align: center;
   color: var(--accent);
+`;
+
+export const rowNumberClass = css`
+  width: 2.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+`;
+
+export const urlClass = css`
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+  word-break: break-all;
+`;
+
+export const ghostButtonClass = css`
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  color: var(--cyan);
+  background: transparent;
+  border: 1px solid var(--panel-edge);
+  cursor: pointer;
+  transition:
+    color 120ms linear,
+    border-color 120ms linear;
+
+  &:hover:not(:disabled) {
+    border-color: var(--cyan);
+  }
+
+  &:disabled {
+    color: var(--text-dim);
+    cursor: default;
+  }
+`;
+
+export const dangerButtonClass = css`
+  padding: 0.15rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.12em;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  cursor: pointer;
+  transition:
+    color 120ms linear,
+    background-color 120ms linear;
+
+  &:hover:not(:disabled) {
+    color: #08090b;
+    background: var(--accent);
+  }
+
+  &:disabled {
+    color: var(--text-dim);
+    border-color: var(--panel-edge);
+    cursor: default;
+  }
+`;
+
+export const rowErrorClass = css`
+  display: block;
+  margin-top: 0.3rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  color: var(--accent);
+`;
+
+export const emptyTitleClass = css`
+  margin: 0 0 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--line-strong);
 `;

@@ -179,6 +179,16 @@ describe("GET /", () => {
     const html = await (await app.request("/")).text();
     expect(html).toContain('aria-hidden="true"');
   });
+
+  it("numbers the rows", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "01AAA" }),
+      entry({ id: "01BBB" }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain(">01<");
+    expect(html).toContain(">02<");
+  });
 });
 
 describe("CLIENT_SCRIPT", () => {
