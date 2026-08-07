@@ -2,6 +2,12 @@
  * 管理画面に埋め込むクライアントスクリプト。
  * バンドラを持ち込まないため、素の JavaScript を文字列として保持する。
  */
+/**
+ * GCS への PUT が失敗したとき、Firestore 側にだけ残ったレコードを一覧に出すため
+ * 再読み込みするまでの待ち時間。エラーメッセージを読む時間を確保する。
+ */
+const ORPHAN_RELOAD_DELAY_MS = 4000;
+
 export const CLIENT_SCRIPT = `
 (function () {
   var form = document.getElementById("upload-form");
@@ -114,8 +120,10 @@ export const CLIENT_SCRIPT = `
       if (!put.ok) {
         showError(
           "アップロードに失敗しました (HTTP " + put.status + ")。" +
-          "ファイル情報だけが登録されている場合があります。不要なら一覧から削除してください。"
+          "ファイル情報だけが登録されている場合があります。" +
+          "数秒後に一覧を再読み込みしますので、不要なら一覧から削除してください。"
         );
+        setTimeout(function () { location.reload(); }, ${ORPHAN_RELOAD_DELAY_MS});
         return;
       }
 

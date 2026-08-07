@@ -55,6 +55,18 @@ describe("GET /", () => {
     expect(await res.text()).toContain("まだファイルがありません");
   });
 
+  it("starts the document with a doctype so browsers use standards mode", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html.startsWith("<!DOCTYPE html>")).toBe(true);
+  });
+
+  it("starts the error page with a doctype too", async () => {
+    vi.mocked(listFiles).mockRejectedValue(new Error("Firestore is down"));
+    const html = await (await app.request("/")).text();
+    expect(html.startsWith("<!DOCTYPE html>")).toBe(true);
+  });
+
   it("renders a row with the title and share URL", async () => {
     vi.mocked(listFiles).mockResolvedValue([entry()]);
     const html = await (await app.request("/")).text();
@@ -161,5 +173,19 @@ describe("CLIENT_SCRIPT", () => {
   it("does not contain a closing script tag that would break embedding", async () => {
     const { CLIENT_SCRIPT } = await import("./webScript.js");
     expect(CLIENT_SCRIPT).not.toContain("</script>");
+  });
+
+  // POST /upload writes the Firestore record before the browser PUTs to GCS,
+  // so a failed PUT leaves an orphan row. The message tells the user to delete
+  // it from the list, which requires the list to be refreshed.
+  it("reloads after a delay when the GCS PUT fails, so the orphan row appears", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    const putFailure = CLIENT_SCRIPT.slice(
+      CLIENT_SCRIPT.indexOf("if (!put.ok)"),
+      CLIENT_SCRIPT.indexOf("} catch (err)")
+    );
+    expect(putFailure).toContain("ファイル情報だけが登録されている場合があります");
+    expect(putFailure).toContain("再読み込み");
+    expect(putFailure).toMatch(/setTimeout\(function \(\) \{ location\.reload\(\); \}, \d+\)/);
   });
 });

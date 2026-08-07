@@ -6,6 +6,7 @@ vi.mock("./lib/firebase.js", () => ({
 }));
 
 import app from "./index.js";
+import { db } from "./lib/firebase.js";
 
 const DENIED_IP = "203.0.113.9";
 
@@ -51,9 +52,25 @@ describe("IP allowlist coverage", () => {
 });
 
 describe("without ALLOWED_IPS", () => {
-  it("does not block the file list endpoint", async () => {
+  beforeEach(() => {
     delete process.env.ALLOWED_IPS;
+    // Give /files a working Firestore mock so the route actually succeeds.
+    // Asserting 200 (rather than "not 403") is what makes this test fail if the
+    // middleware stops letting the request through.
+    vi.mocked(db.collection).mockReturnValue({
+      orderBy: vi.fn().mockReturnValue({
+        get: vi.fn().mockResolvedValue({ docs: [] }),
+      }),
+    } as unknown as ReturnType<typeof db.collection>);
+  });
+
+  afterEach(() => {
+    vi.mocked(db.collection).mockReset();
+  });
+
+  it("does not block the file list endpoint", async () => {
     const res = await request("/files");
-    expect(res.status).not.toBe(403);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ files: [] });
   });
 });

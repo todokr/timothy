@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { css, Style } from "hono/css";
+import { raw } from "hono/html";
 import { listFiles, resolveBaseUrl, type FileEntry } from "../lib/files.js";
 import { CLIENT_SCRIPT } from "./webScript.js";
 
@@ -145,22 +146,29 @@ const errorPageClass = css`
   color: #a61b1b;
 `;
 
+// hono の c.html は doctype を付けないため、明示的に先頭へ出力して
+// ブラウザが互換モード (quirks mode) で描画するのを防ぐ。
+const DOCTYPE = raw("<!DOCTYPE html>");
+
 function Layout(props: { children: unknown; withScript?: boolean }) {
   return (
-    <html lang="ja">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Timothy</title>
-        <Style />
-      </head>
-      <body class={bodyClass}>
-        <div class={containerClass}>{props.children}</div>
-        {props.withScript ? (
-          <script dangerouslySetInnerHTML={{ __html: CLIENT_SCRIPT }}></script>
-        ) : null}
-      </body>
-    </html>
+    <>
+      {DOCTYPE}
+      <html lang="ja">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>Timothy</title>
+          <Style />
+        </head>
+        <body class={bodyClass}>
+          <div class={containerClass}>{props.children}</div>
+          {props.withScript ? (
+            <script dangerouslySetInnerHTML={{ __html: CLIENT_SCRIPT }}></script>
+          ) : null}
+        </body>
+      </html>
+    </>
   );
 }
 
