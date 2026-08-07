@@ -4,7 +4,7 @@ import { raw } from "hono/html";
 import { listFiles, resolveBaseUrl, type FileEntry } from "../lib/files.js";
 import { CLIENT_SCRIPT } from "./webScript.js";
 import {
-  bodyClass,
+  globalStyles,
   containerClass,
   tableClass,
   badgeClass,
@@ -45,9 +45,9 @@ function Layout(props: { children: unknown; withScript?: boolean }) {
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           <title>Timothy</title>
-          <Style />
+          <Style>{globalStyles}</Style>
         </head>
-        <body class={bodyClass}>
+        <body>
           <div class={containerClass}>{props.children}</div>
           {props.withScript ? (
             <script dangerouslySetInnerHTML={{ __html: CLIENT_SCRIPT }}></script>

@@ -1,11 +1,56 @@
 import { css } from "hono/css";
 
-export const bodyClass = css`
-  margin: 0;
-  padding: 2rem 1.5rem 4rem;
-  font-family: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
-  color: #1f2933;
-  background: #f7f8fa;
+export const globalStyles = css`
+  :root {
+    color-scheme: dark;
+
+    --bg: #08090b;
+    --panel: #0e1013;
+    --panel-edge: #1a1d22;
+    --line: #2a1116;
+    --line-strong: #7a1020;
+    --accent: #ff2e3e;
+    --cyan: #00e5e8;
+    --yellow: #fcee0a;
+    --text: #d3d7de;
+    --text-dim: #7b828e;
+
+    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --font-ui: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+
+    --gap: 1rem;
+    --gap-lg: 2rem;
+  }
+
+  html,
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  body {
+    padding: 2rem 1.5rem 4rem;
+    font-family: var(--font-ui);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+
+  a {
+    color: var(--cyan);
+    text-decoration: none;
+  }
+
+  a:hover {
+    text-decoration: underline;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
 `;
 
 export const containerClass = css`
@@ -16,23 +61,23 @@ export const containerClass = css`
 export const tableClass = css`
   width: 100%;
   border-collapse: collapse;
-  background: #fff;
-  border: 1px solid #e2e6eb;
-  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
   overflow: hidden;
 
   th,
   td {
     padding: 0.6rem 0.75rem;
     text-align: left;
-    border-bottom: 1px solid #eef1f4;
+    border-bottom: 1px solid var(--line);
     font-size: 0.875rem;
     vertical-align: top;
   }
 
   th {
-    background: #f2f4f7;
+    background: #121419;
     font-weight: 600;
+    color: var(--text-dim);
   }
 
   tr:last-child td {
@@ -40,7 +85,7 @@ export const tableClass = css`
   }
 
   tr[data-expired="true"] {
-    color: #9aa5b1;
+    color: var(--text-dim);
   }
 `;
 
@@ -49,17 +94,15 @@ export const badgeClass = css`
   padding: 0.1rem 0.4rem;
   margin-left: 0.4rem;
   font-size: 0.75rem;
-  border-radius: 4px;
-  background: #fde2e2;
-  color: #a61b1b;
+  color: var(--accent);
+  border: 1px solid var(--line-strong);
 `;
 
 export const formClass = css`
-  margin-bottom: 2rem;
+  margin-bottom: var(--gap-lg);
   padding: 1.25rem;
-  background: #fff;
-  border: 1px solid #e2e6eb;
-  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
 
   label {
     display: block;
@@ -77,33 +120,32 @@ export const formClass = css`
     padding: 0.4rem 0.5rem;
     font: inherit;
     font-weight: 400;
-    border: 1px solid #cbd2d9;
-    border-radius: 4px;
+    color: var(--text);
+    background: #14171c;
+    border: 1px solid var(--panel-edge);
   }
 `;
 
 export const dropZoneClass = css`
-  margin-bottom: 1rem;
+  margin-bottom: var(--gap);
   padding: 1.5rem;
   text-align: center;
-  color: #7b8794;
-  border: 2px dashed #cbd2d9;
-  border-radius: 8px;
+  color: var(--text-dim);
+  border: 1px dashed var(--panel-edge);
 
   &[data-dragging="true"] {
-    border-color: #2f80ed;
-    background: #eef5fe;
-    color: #2f80ed;
+    color: var(--yellow);
+    border-color: var(--yellow);
   }
 `;
 
 export const errorBoxClass = css`
-  margin: 0 0 1rem;
+  margin: 0 0 var(--gap);
   padding: 0.6rem 0.75rem;
   font-size: 0.875rem;
-  color: #a61b1b;
-  background: #fde2e2;
-  border-radius: 4px;
+  color: var(--accent);
+  background: #1a0d10;
+  border: 1px solid var(--line-strong);
 
   &[hidden] {
     display: none;
@@ -113,14 +155,13 @@ export const errorBoxClass = css`
 export const emptyClass = css`
   padding: 3rem 1rem;
   text-align: center;
-  color: #7b8794;
-  background: #fff;
-  border: 1px solid #e2e6eb;
-  border-radius: 8px;
+  color: var(--text-dim);
+  background: var(--panel);
+  border: 1px solid var(--panel-edge);
 `;
 
 export const errorPageClass = css`
   padding: 3rem 1rem;
   text-align: center;
-  color: #a61b1b;
+  color: var(--accent);
 `;

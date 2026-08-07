@@ -167,6 +167,12 @@ describe("GET /", () => {
     const html = await (await app.request("/")).text();
     expect(html).not.toContain("addEventListener");
   });
+
+  it("declares a dark color scheme", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toMatch(/color-scheme:\s*dark/);
+  });
 });
 
 describe("CLIENT_SCRIPT", () => {
