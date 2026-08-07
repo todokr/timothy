@@ -217,8 +217,9 @@ export const tableClass = css`
     color: var(--text-dim);
   }
 
+  /* 減光しつつ本文サイズで AA (4.91:1) を満たすくすんだシアン。 */
   tr[data-expired="true"] a {
-    color: #4c7275;
+    color: #5c898c;
   }
 `;
 
@@ -440,11 +441,15 @@ export const rowErrorClass = css`
   color: var(--accent);
 `;
 
+/*
+ * --line-strong は罫線用の暗い赤で、文字に使うと 1.74:1 しか出ない。
+ * 下の日本語 (--text-dim) との対比は文字色ではなく字間と太さで作る。
+ */
 export const emptyTitleClass = css`
   margin: 0 0 0.5rem;
   font-family: var(--font-mono);
   font-size: 0.875rem;
   letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--line-strong);
+  color: var(--text);
 `;
