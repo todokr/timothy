@@ -11,6 +11,7 @@ LLMが生成したHTMLをターミナルからアップロードし、有効期�
 - HTMLをファイルまたは標準入力からアップロード
 - 有効期限付きURLで共有（デフォルト: 7日間）
 - アップロード済みファイルの一覧表示・削除をCLIで操作
+- APIが配信するWeb UIからファイルの一覧表示とアップロードができる
 - セルフホスト: ストレージとアクセスを自分で管理
 
 ## 仕組み
@@ -76,6 +77,22 @@ ID                          TITLE             CREATED       EXPIRES
 01JWXYZ...                  月次レポート        2026-05-20    2026-05-27
 01JWABC...                  分析結果            2026-05-18    2026-05-25
 ```
+
+### Web UI
+
+ブラウザでAPIエンドポイントを開くと、管理画面が表示されます:
+
+```
+https://your-api.example.com/
+```
+
+ここから、アップロード済みファイル（タイトル・説明・共有URL・有効期限・作成日時）の一覧表示、
+ファイルを選択またはドラッグ＆ドロップしてのHTMLファイルのアップロード、共有URLのコピー、
+ファイルの削除ができます。期限切れのファイルも「期限切れ」バッジ付きで一覧に残るため、
+削除操作は引き続き行えます。
+
+Web UIのアップロードはCLIと同じ署名付きURLのフローを使うため、ストレージバケットに
+CORSの設定が必要です。[セルフホスティング](#セルフホスティング) を参照してください。
 
 ### 削除
 
@@ -271,7 +288,7 @@ npx tsx packages/api/scripts/seed-api-key.ts
 
 ### 8. （オプション）IPアドレス制限の設定
 
-共有ファイルの閲覧者をIPアドレスで制限する場合、Cloud Runの `ALLOWED_IPS` 環境変数にカンマ区切りでIPまたはCIDRを設定します:
+APIへのアクセスを制限する場合、Cloud Runの `ALLOWED_IPS` 環境変数にカンマ区切りでIPまたはCIDRを設定します:
 
 ```bash
 gcloud run services update timothy-api \
@@ -279,7 +296,9 @@ gcloud run services update timothy-api \
   --set-env-vars ALLOWED_IPS="203.0.113.0/24,198.51.100.42"
 ```
 
-`ALLOWED_IPS` を設定しない場合、共有URLは任意のIPからアクセス可能です。
+`ALLOWED_IPS` はWeb UI（`/`）、管理系エンドポイント（`/upload`、`/files`）、共有エンドポイント
+（`/s/*`）に適用されます。未設定の場合はすべてのリクエストが許可されます。設定するとCLIからの
+アクセスもこのIPアドレスに制限される点に注意してください。
 
 ### 9. CLIの設定
 
@@ -291,6 +310,30 @@ tim setup
 # API endpoint [https://api.timothy.example.com]: https://timothy-api-xxxx-an.a.run.app
 ```
 
+### バケットのCORS設定
+
+Web UIはブラウザから署名付きURLを使って直接Cloud Storageにアップロードします。
+バケットにCORSを設定していないと、このアップロードは失敗します（CLIは影響を受けません）。
+
+`cors.json` を作成し、オリジンをご自身のAPIエンドポイントに置き換えてください:
+
+```json
+[
+  {
+    "origin": ["https://your-api.example.com"],
+    "method": ["PUT"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]
+```
+
+適用します:
+
+```bash
+gcloud storage buckets update gs://YOUR_BUCKET --cors-file=cors.json
+```
+
 ### インフラ構成
 
 | コンポーネント | 設定 |
@@ -298,7 +341,7 @@ tim setup
 | Cloud Run | 最小インスタンス: 0、最大インスタンス: 2、認証なし（allow-unauthenticated） |
 | Cloud Storage | パブリックアクセス禁止・Cloud Run APIを経由してプロキシ配信 |
 | Firestore | Admin SDK経由のみ書き込み可・Firebase CLIでルール・インデックスを管理 |
-| 認証 | アップロード・一覧・削除はAPIキー（Bearerトークン）、共有URLはオプションのIPアドレス制限 |
+| 認証 | アップロード・一覧・削除はAPIキー（Bearerトークン）、Web UI・管理系エンドポイント・共有URLはオプションのIPアドレス制限 |
 
 ## AWSでのセルフホスティング（Lambda）
 

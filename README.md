@@ -11,6 +11,7 @@ A self-hosted CLI tool to upload LLM-generated HTML and share it via time-limite
 - Upload HTML from a file or stdin
 - Share via a time-limited URL (default: 7 days)
 - List and delete your uploaded files from the CLI
+- Browse and upload files from a web UI served by the API
 - Self-hosted: you control the storage and access
 
 ## How It Works
@@ -85,6 +86,23 @@ ID                          TITLE             CREATED       EXPIRES
 01JWXYZ...                  Monthly Report    2026-05-20    2026-05-27
 01JWABC...                  Analysis          2026-05-18    2026-05-25
 ```
+
+### Web UI
+
+Open your API endpoint in a browser to get a management page:
+
+```
+https://your-api.example.com/
+```
+
+From there you can browse your uploaded files (title, description, share
+URL, expiry, and creation date), upload a new HTML file by picking it or
+dragging it onto the page, copy share URLs, and delete files. Expired files
+stay listed with an "expired" badge so you can still delete them.
+
+The web UI uploads through the same signed-URL flow as the CLI, so it
+requires CORS to be configured on your storage bucket. See
+[Self-Hosting](#self-hosting).
 
 ### Delete
 
@@ -281,7 +299,7 @@ Alternatively, add the entry manually via the Firebase console under Firestore >
 
 ### 8. (Optional) Restrict access by IP
 
-To limit who can view shared files, set the `ALLOWED_IPS` environment variable on Cloud Run (comma-separated IPs or CIDR ranges):
+To restrict access to the API, set the `ALLOWED_IPS` environment variable on Cloud Run (comma-separated IPs or CIDR ranges):
 
 ```bash
 gcloud run services update timothy-api \
@@ -289,7 +307,10 @@ gcloud run services update timothy-api \
   --set-env-vars ALLOWED_IPS="203.0.113.0/24,198.51.100.42"
 ```
 
-If `ALLOWED_IPS` is not set, share URLs are accessible from any IP.
+`ALLOWED_IPS` applies to the web UI (`/`), the management endpoints
+(`/upload`, `/files`) and the share endpoint (`/s/*`). When it is unset, all
+requests are allowed. Note that setting it also restricts the CLI to the
+listed addresses.
 
 ### 9. Configure the CLI
 
@@ -301,6 +322,31 @@ tim setup
 # API endpoint [https://api.timothy.example.com]: https://timothy-api-xxxx-an.a.run.app
 ```
 
+### Storage bucket CORS
+
+The web UI uploads directly from the browser to Cloud Storage using a signed
+URL. Without CORS configured on the bucket, those uploads fail (the CLI is
+unaffected).
+
+Create `cors.json`, replacing the origin with your API endpoint:
+
+```json
+[
+  {
+    "origin": ["https://your-api.example.com"],
+    "method": ["PUT"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]
+```
+
+Apply it:
+
+```bash
+gcloud storage buckets update gs://YOUR_BUCKET --cors-file=cors.json
+```
+
 ### Infrastructure Overview
 
 | Component | Config |
@@ -308,7 +354,7 @@ tim setup
 | Cloud Run | min-instances: 0, max-instances: 2, allow-unauthenticated |
 | Cloud Storage | Public access disabled; proxied through Cloud Run API |
 | Firestore | Write access via Admin SDK only; rules and indexes managed via Firebase CLI |
-| Auth | API key (Bearer token) for upload/list/delete; optional IP allowlist for share URLs |
+| Auth | API key (Bearer token) for upload/list/delete; optional IP allowlist for the web UI, management endpoints, and share URLs |
 
 ## Self-Hosting on AWS (Lambda)
 
