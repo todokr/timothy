@@ -41,3 +41,13 @@ export async function deleteFile(storagePath: string): Promise<void> {
   const bucket = getBucket();
   await bucket.file(storagePath).delete();
 }
+
+/** Storage が「オブジェクトが無い」ことを示すエラーかどうか。 */
+export function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === 404
+  );
+}
