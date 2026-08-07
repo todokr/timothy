@@ -9,6 +9,10 @@ import serveRoute from "./routes/serve.js";
 const app = new Hono();
 
 app.use("*", accessLogMiddleware);
+app.use("/", ipAllowlistMiddleware);
+app.use("/upload", ipAllowlistMiddleware);
+app.use("/files", ipAllowlistMiddleware);
+app.use("/files/*", ipAllowlistMiddleware);
 app.use("/s/*", ipAllowlistMiddleware);
 
 app.route("/upload", uploadRoute);
