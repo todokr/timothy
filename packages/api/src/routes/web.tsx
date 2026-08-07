@@ -73,6 +73,62 @@ const badgeClass = css`
   color: #a61b1b;
 `;
 
+const formClass = css`
+  margin-bottom: 2rem;
+  padding: 1.25rem;
+  background: #fff;
+  border: 1px solid #e2e6eb;
+  border-radius: 8px;
+
+  label {
+    display: block;
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  input[type="text"],
+  input[type="number"] {
+    display: block;
+    width: 100%;
+    max-width: 24rem;
+    margin-top: 0.25rem;
+    padding: 0.4rem 0.5rem;
+    font: inherit;
+    font-weight: 400;
+    border: 1px solid #cbd2d9;
+    border-radius: 4px;
+  }
+`;
+
+const dropZoneClass = css`
+  margin-bottom: 1rem;
+  padding: 1.5rem;
+  text-align: center;
+  color: #7b8794;
+  border: 2px dashed #cbd2d9;
+  border-radius: 8px;
+
+  &[data-dragging="true"] {
+    border-color: #2f80ed;
+    background: #eef5fe;
+    color: #2f80ed;
+  }
+`;
+
+const errorBoxClass = css`
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.875rem;
+  color: #a61b1b;
+  background: #fde2e2;
+  border-radius: 4px;
+
+  &[hidden] {
+    display: none;
+  }
+`;
+
 const emptyClass = css`
   padding: 3rem 1rem;
   text-align: center;
@@ -155,6 +211,36 @@ function FileTable(props: { files: FileEntry[]; nowMs: number }) {
   );
 }
 
+function UploadForm() {
+  return (
+    <form id="upload-form" class={formClass}>
+      <p id="form-error" class={errorBoxClass} hidden></p>
+      <div id="drop-zone" class={dropZoneClass} data-dragging="false">
+        ここに HTML ファイルをドラッグ&amp;ドロップ
+      </div>
+      <label>
+        ファイル
+        <input id="file-input" type="file" name="file" accept=".html,.htm" required />
+      </label>
+      <label>
+        タイトル
+        <input id="title-input" type="text" name="title" required />
+      </label>
+      <label>
+        説明（任意）
+        <input id="description-input" type="text" name="description" />
+      </label>
+      <label>
+        有効期間（日）
+        <input id="ttl-input" type="number" name="ttlDays" value="7" min="1" step="1" required />
+      </label>
+      <button id="submit-button" type="submit">
+        アップロード
+      </button>
+    </form>
+  );
+}
+
 const app = new Hono();
 
 app.get("/", async (c) => {
@@ -173,6 +259,7 @@ app.get("/", async (c) => {
   return c.html(
     <Layout>
       <h1>Timothy</h1>
+      <UploadForm />
       <FileTable files={files} nowMs={Date.now()} />
     </Layout>
   );

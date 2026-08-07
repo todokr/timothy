@@ -103,4 +103,43 @@ describe("GET /", () => {
     expect(res.headers.get("content-type")).toMatch(/text\/html/);
     expect(await res.text()).toContain("一覧を取得できませんでした");
   });
+
+  it("renders the upload form with all inputs", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain('id="upload-form"');
+    expect(html).toContain('id="drop-zone"');
+    expect(html).toContain('id="file-input"');
+    expect(html).toContain('id="title-input"');
+    expect(html).toContain('id="description-input"');
+    expect(html).toContain('id="ttl-input"');
+    expect(html).toContain('id="submit-button"');
+    expect(html).toContain('id="form-error"');
+  });
+
+  it("restricts the file input to HTML files", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain('accept=".html,.htm"');
+  });
+
+  it("defaults the TTL to 7 days and only accepts positive integers", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain('value="7"');
+    expect(html).toContain('min="1"');
+    expect(html).toContain('step="1"');
+  });
+
+  it("hides the error area by default", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toMatch(/id="form-error"[^>]*hidden/);
+  });
+
+  it("does not render the upload form on the error page", async () => {
+    vi.mocked(listFiles).mockRejectedValue(new Error("Firestore is down"));
+    const html = await (await app.request("/")).text();
+    expect(html).not.toContain('id="upload-form"');
+  });
 });
