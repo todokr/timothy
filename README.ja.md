@@ -485,6 +485,10 @@ tim setup
 # API endpoint [https://api.timothy.example.com]: https://xxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws
 ```
 
+Web UIを使う場合、ここでもCloud Run版と同様にストレージバケットへのCORS設定が必要です。
+これはコンピュート層とは無関係です。上記の
+[バケットのCORS設定](#バケットのcors設定) を参照してください。
+
 ### インフラ構成
 
 | コンポーネント | 設定 |
@@ -492,7 +496,7 @@ tim setup
 | Lambda | コンテナイメージ（`Dockerfile.lambda`）、Function URL（認証なし） |
 | Cloud Storage | Firebase Cloud Storage・Lambdaを経由してプロキシ配信 |
 | Firestore | Firebase Firestore・Cloud Run版と共用可 |
-| 認証 | アップロード・一覧・削除はAPIキー（Bearerトークン）、共有URLはオプションのIPアドレス制限 |
+| 認証 | アップロード・一覧・削除はAPIキー（Bearerトークン）、Web UI・管理系エンドポイント・共有URLはオプションのIPアドレス制限 |
 
 ## ライセンス
 

@@ -498,6 +498,10 @@ tim setup
 # API endpoint [https://api.timothy.example.com]: https://xxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws
 ```
 
+The web UI needs CORS configured on the storage bucket here too, same as the
+Cloud Run setup — this is independent of the compute layer. See
+[Storage bucket CORS](#storage-bucket-cors) above.
+
 ### Infrastructure Overview
 
 | Component | Config |
@@ -505,7 +509,7 @@ tim setup
 | Lambda | Container image (`Dockerfile.lambda`), Function URL (no auth) |
 | Cloud Storage | Firebase Cloud Storage; proxied through Lambda |
 | Firestore | Firebase Firestore; shared with Cloud Run setup |
-| Auth | API key (Bearer token) for upload/list/delete; optional IP allowlist for share URLs |
+| Auth | API key (Bearer token) for upload/list/delete; optional IP allowlist for the web UI, management endpoints, and share URLs |
 
 ## License
 
