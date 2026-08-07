@@ -305,10 +305,33 @@ gcloud run services update timothy-api \
 list, upload, and delete files.** Note that setting it also restricts the CLI
 and every share-URL recipient to the listed addresses; see step 7.
 
-The client IP is taken from `X-Forwarded-For`, using the second-to-last entry —
-the value Cloud Run / Google Cloud Load Balancer appends. Do not put a proxy in
-front that rewrites or collapses that header, or the allowlist will match the
-wrong address.
+The client IP is taken from `X-Forwarded-For`, counting `XFF_TRUSTED_HOPS`
+entries back from the **end** of the header. Every proxy in front of the service
+appends the address it actually observed, so only the entries appended by your
+own proxies are trustworthy — anything earlier in the header is attacker-supplied.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `ALLOWED_IPS` | unset (all requests allowed) | Comma-separated IPs or CIDR ranges permitted to reach `/`, `/upload`, `/files`, `/files/<id>` and `/s/*` |
+| `XFF_TRUSTED_HOPS` | `1` | How many proxies in front of the service append to `X-Forwarded-For`. The client IP is read that many entries back from the end |
+
+The default of `1` matches a bare Cloud Run service on a `*.run.app` URL (and a
+Lambda Function URL), where exactly one entry is appended. If you front the
+service with a Google Cloud Load Balancer or Cloud Armor, two entries are
+appended — set `XFF_TRUSTED_HOPS=2`:
+
+```bash
+gcloud run services update timothy-api \
+  --region ${REGION} \
+  --set-env-vars XFF_TRUSTED_HOPS=2
+```
+
+Get this number right. **Set it too low and callers can spoof the allowlist** by
+sending their own `X-Forwarded-For` header — the value they forge ends up in the
+position you trust. Set it too high and no request has enough entries to satisfy
+it, so every request is denied. A header with fewer entries than
+`XFF_TRUSTED_HOPS` is rejected, because it did not traverse the proxies you
+configured.
 
 ### 9. Configure the CLI
 
@@ -495,9 +518,25 @@ aws lambda update-function-configuration \
 
 `ALLOWED_IPS` covers the web UI (`/`), the management endpoints (`/upload`,
 `/files`, `/files/<id>`) and the share endpoint (`/s/*`) alike.
-**When it is unset, all requests are allowed.** The client IP is read from the
-second-to-last `X-Forwarded-For` entry, which is the value Lambda Function URLs
-append.
+**When it is unset, all requests are allowed.** The client IP is read from
+`X-Forwarded-For`, counting `XFF_TRUSTED_HOPS` entries back from the **end** of
+the header.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `ALLOWED_IPS` | unset (all requests allowed) | Comma-separated IPs or CIDR ranges permitted to reach `/`, `/upload`, `/files`, `/files/<id>` and `/s/*` |
+| `XFF_TRUSTED_HOPS` | `1` | How many proxies in front of the function append to `X-Forwarded-For`. The client IP is read that many entries back from the end |
+
+The default of `1` matches a Lambda Function URL (and a bare Cloud Run service),
+where exactly one entry is appended. If you put CloudFront, an ALB or an API
+Gateway in front — or run behind a Google Cloud Load Balancer / Cloud Armor on
+the Cloud Run deployment — count the proxies that append and set
+`XFF_TRUSTED_HOPS` accordingly, e.g. `2`.
+
+Get this number right. **Set it too low and callers can spoof the allowlist** by
+sending their own `X-Forwarded-For` header. Set it too high and every request is
+denied, since a header with fewer entries than `XFF_TRUSTED_HOPS` is rejected as
+not having traversed the proxies you configured.
 
 ### 9. Configure the CLI
 

@@ -281,9 +281,30 @@ URLを知っている人は誰でもファイルの一覧取得・アップロ�
 CLIからのアクセスも、共有URLを開く相手も、このIPアドレスに制限される点に注意してください
 （ステップ7を参照）。
 
-クライアントIPは `X-Forwarded-For` の末尾から2番目のエントリ（Cloud Run / Google Cloud
-Load Balancer が追記する値）から判定します。このヘッダーを書き換える・まとめてしまう
-プロキシを前段に置くと、許可リストが誤ったアドレスと照合される点に注意してください。
+クライアントIPは `X-Forwarded-For` の**末尾から** `XFF_TRUSTED_HOPS` 個目のエントリから
+判定します。前段のプロキシは自分が実際に観測した接続元アドレスを末尾に追記していくため、
+信頼できるのは自分で用意したプロキシが追記した範囲だけで、それより前のエントリは
+攻撃者が自由に詐称できます。
+
+| 環境変数 | 既定値 | 意味 |
+|---|---|---|
+| `ALLOWED_IPS` | 未設定（全リクエスト許可） | `/`、`/upload`、`/files`、`/files/<id>`、`/s/*` へのアクセスを許可するIP・CIDRのカンマ区切り |
+| `XFF_TRUSTED_HOPS` | `1` | サービスの前段で `X-Forwarded-For` に追記するプロキシの段数。末尾からこの数だけ遡ったエントリをクライアントIPとして採用する |
+
+既定値の `1` は、`*.run.app` の素のCloud Runサービス（およびLambda Function URL）のように
+1エントリだけが追記される構成に対応します。Google Cloud Load Balancer や Cloud Armor を
+前段に置く場合は2エントリ追記されるため、`XFF_TRUSTED_HOPS=2` を設定してください:
+
+```bash
+gcloud run services update timothy-api \
+  --region ${REGION} \
+  --set-env-vars XFF_TRUSTED_HOPS=2
+```
+
+この値は正確に設定してください。**小さすぎると、呼び出し側が自分で `X-Forwarded-For` を
+付けて許可リストを詐称できてしまいます**（詐称した値が、信頼している位置に入り込むため）。
+逆に大きすぎるとエントリ数が足りず、すべてのリクエストが拒否されます。エントリ数が
+`XFF_TRUSTED_HOPS` に満たないヘッダーは、設定したプロキシを経由していないものとして拒否します。
 
 ### 9. CLIの設定
 
@@ -458,8 +479,23 @@ aws lambda update-function-configuration \
 
 `ALLOWED_IPS` はWeb UI（`/`）、管理系エンドポイント（`/upload`、`/files`、`/files/<id>`）、
 共有エンドポイント（`/s/*`）に一律で適用されます。**未設定の場合はすべてのリクエストが
-許可されます。** クライアントIPは `X-Forwarded-For` の末尾から2番目のエントリ
-（Lambda Function URL が追記する値）から判定します。
+許可されます。** クライアントIPは `X-Forwarded-For` の**末尾から** `XFF_TRUSTED_HOPS`
+個目のエントリから判定します。
+
+| 環境変数 | 既定値 | 意味 |
+|---|---|---|
+| `ALLOWED_IPS` | 未設定（全リクエスト許可） | `/`、`/upload`、`/files`、`/files/<id>`、`/s/*` へのアクセスを許可するIP・CIDRのカンマ区切り |
+| `XFF_TRUSTED_HOPS` | `1` | 関数の前段で `X-Forwarded-For` に追記するプロキシの段数。末尾からこの数だけ遡ったエントリをクライアントIPとして採用する |
+
+既定値の `1` は、Lambda Function URL（および素のCloud Runサービス）のように1エントリだけが
+追記される構成に対応します。CloudFront・ALB・API Gateway を前段に置く場合や、Cloud Run側で
+Google Cloud Load Balancer / Cloud Armor を挟む場合は、追記するプロキシの段数を数えて
+`XFF_TRUSTED_HOPS` に設定してください（例: `2`）。
+
+この値は正確に設定してください。**小さすぎると、呼び出し側が自分で `X-Forwarded-For` を
+付けて許可リストを詐称できてしまいます。** 逆に大きすぎるとすべてのリクエストが拒否されます。
+エントリ数が `XFF_TRUSTED_HOPS` に満たないヘッダーは、設定したプロキシを経由していないものとして
+拒否されるためです。
 
 ### 9. CLIの設定
 

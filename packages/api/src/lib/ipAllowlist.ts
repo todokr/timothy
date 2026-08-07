@@ -12,22 +12,39 @@ function isInCidr(ip: string, cidr: string): boolean {
 }
 
 /**
+ * 信頼するプロキシ段数を返す。
+ *
+ * `XFF_TRUSTED_HOPS` が未設定・数値でない・1 未満のときは 1 にフォールバックする。
+ */
+function trustedHops(): number {
+  const parsed = parseInt(process.env.XFF_TRUSTED_HOPS ?? "", 10);
+  if (Number.isNaN(parsed) || parsed < 1) return 1;
+  return parsed;
+}
+
+/**
  * `X-Forwarded-For` から信頼できるクライアント IP を取り出す。
  *
- * Cloud Run / Google Cloud Load Balancer / Lambda Function URL は、クライアントが
- * 送ってきた `X-Forwarded-For` の末尾に「実際に観測した接続元 IP」を追記する。
- * つまり先頭のエントリは完全にクライアント側で偽装できるため使ってはならず、
- * 信頼できるのは末尾から 2 番目のエントリ（末尾はロードバランサ自身の IP）。
+ * クライアントが送ってきた `X-Forwarded-For` の末尾に、前段のプロキシが
+ * 「実際に観測した接続元 IP」を 1 段ずつ追記していく。つまり末尾から数えて
+ * `XFF_TRUSTED_HOPS` 個目のエントリだけが信頼でき、それより前は
+ * クライアント側で自由に偽装できるため使ってはならない。
  *
- * エントリが 1 つしかない場合、それがプラットフォームの追記した値そのものなので採用する。
+ * 既定値の 1 は、素の Cloud Run サービス（`*.run.app`）や Lambda Function URL の
+ * ように 1 段だけ追記される構成に対応する。Google Cloud Load Balancer や
+ * Cloud Armor を前段に置く場合は 2 を設定する。
+ *
+ * エントリ数が信頼段数より少ない場合、設定したプロキシを通っていないリクエスト
+ * なので信頼できない。`null` を返して呼び出し側の 403 パスに倒す。
  */
 export function getClientIp(c: Context): string | null {
   const forwarded = c.req.header("x-forwarded-for");
   if (!forwarded) return null;
 
-  const entries = forwarded.split(",");
-  if (entries.length === 1) return entries[0].trim();
-  return entries[entries.length - 2].trim();
+  const hops = trustedHops();
+  const entries = forwarded.split(",").map((entry) => entry.trim());
+  if (entries.length < hops) return null;
+  return entries[entries.length - hops];
 }
 
 export async function ipAllowlistMiddleware(c: Context, next: Next): Promise<void | Response> {
