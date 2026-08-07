@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import app, { parseUploadRequest } from "./upload.js";
+import app, { parseUploadRequest, isJsonContentType } from "./upload.js";
 
 vi.mock("../lib/firebase.js", () => ({
   db: {
@@ -78,6 +78,27 @@ describe("parseUploadRequest", () => {
   });
 });
 
+describe("isJsonContentType", () => {
+  it("accepts application/json", () => {
+    expect(isJsonContentType("application/json")).toBe(true);
+  });
+
+  it("accepts application/json with a charset parameter and odd casing", () => {
+    expect(isJsonContentType("Application/JSON; charset=utf-8")).toBe(true);
+    expect(isJsonContentType("  application/json ; charset=UTF-8")).toBe(true);
+  });
+
+  it("rejects a missing header", () => {
+    expect(isJsonContentType(undefined)).toBe(false);
+  });
+
+  it("rejects the simple-request content types usable for cross-origin form posts", () => {
+    expect(isJsonContentType("text/plain")).toBe(false);
+    expect(isJsonContentType("application/x-www-form-urlencoded")).toBe(false);
+    expect(isJsonContentType("multipart/form-data; boundary=x")).toBe(false);
+  });
+});
+
 describe("POST /upload", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -122,6 +143,30 @@ describe("POST /upload", () => {
     });
     const res = await fetchDirect(req);
     expect(res.status).toBe(400);
+  });
+
+  it("returns 415 when Content-Type is not application/json", async () => {
+    const req = new Request("http://localhost/", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ title: "T", description: "D", ttlDays: 1 }),
+    });
+    const res = await fetchDirect(req);
+    expect(res.status).toBe(415);
+    expect(generateSignedUploadUrl).not.toHaveBeenCalled();
+    expect(db.collection).not.toHaveBeenCalled();
+  });
+
+  it("returns 415 when Content-Type is absent", async () => {
+    const req = new Request("http://localhost/", {
+      method: "POST",
+      body: JSON.stringify({ title: "T", description: "D", ttlDays: 1 }),
+      headers: {},
+    });
+    // fetch() infers text/plain for a string body; strip it to simulate no header.
+    req.headers.delete("content-type");
+    const res = await fetchDirect(req);
+    expect(res.status).toBe(415);
   });
 
   it("generates signed upload URL and returns metadata on success", async () => {

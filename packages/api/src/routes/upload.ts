@@ -43,7 +43,21 @@ export function parseUploadRequest(body: unknown): ParseResult {
 
 const app = new Hono();
 
+/**
+ * `c.req.json()` は Content-Type を見ずに本文を解釈するため、
+ * `<form enctype="text/plain">` によるクロスオリジン投稿が
+ * CORS プリフライトなしで到達してしまう。application/json を必須にして塞ぐ。
+ */
+export function isJsonContentType(header: string | undefined): boolean {
+  if (!header) return false;
+  return header.split(";")[0].trim().toLowerCase() === "application/json";
+}
+
 app.post("/", async (c) => {
+  if (!isJsonContentType(c.req.header("content-type"))) {
+    return c.json({ error: "Content-Type must be application/json" }, 415);
+  }
+
   let body: unknown;
   try {
     body = await c.req.json();
