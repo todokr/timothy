@@ -15,6 +15,7 @@ import {
   badgeClass,
   formClass,
   dropZoneClass,
+  submitButtonClass,
   errorBoxClass,
   emptyClass,
   errorPageClass,
@@ -170,7 +171,7 @@ function UploadForm() {
         有効期間（日）
         <input id="ttl-input" type="number" name="ttlDays" value="7" min="1" step="1" required />
       </label>
-      <button id="submit-button" type="submit">
+      <button id="submit-button" type="submit" class={submitButtonClass}>
         アップロード
       </button>
     </form>

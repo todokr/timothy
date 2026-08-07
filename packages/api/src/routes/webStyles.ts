@@ -212,15 +212,19 @@ export const badgeClass = css`
 
 export const formClass = css`
   margin-bottom: var(--gap-lg);
-  padding: 1.25rem;
+  padding: 1.5rem;
   background: var(--panel);
   border: 1px solid var(--panel-edge);
 
   label {
     display: block;
-    margin-bottom: 0.75rem;
-    font-size: 0.875rem;
-    font-weight: 600;
+    margin-bottom: 1rem;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    font-weight: 400;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cyan);
   }
 
   input[type="text"],
@@ -228,26 +232,89 @@ export const formClass = css`
     display: block;
     width: 100%;
     max-width: 24rem;
-    margin-top: 0.25rem;
-    padding: 0.4rem 0.5rem;
-    font: inherit;
-    font-weight: 400;
+    margin-top: 0.35rem;
+    padding: 0.45rem 0.1rem;
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    letter-spacing: 0.02em;
     color: var(--text);
-    background: #14171c;
-    border: 1px solid var(--panel-edge);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--panel-edge);
+    border-radius: 0;
+    transition: border-color 120ms linear;
+  }
+
+  input[type="text"]:focus,
+  input[type="number"]:focus {
+    outline: none;
+    border-bottom-color: var(--cyan);
+  }
+
+  input[type="file"] {
+    margin-top: 0.35rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--text-dim);
+  }
+
+  input[type="file"]::file-selector-button {
+    margin-right: 0.6rem;
+    padding: 0.3rem 0.7rem;
+    font: inherit;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--cyan);
+    background: transparent;
+    border: 1px solid var(--line-strong);
+    cursor: pointer;
   }
 `;
 
 export const dropZoneClass = css`
-  margin-bottom: var(--gap);
-  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding: 2rem 1rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
   text-align: center;
   color: var(--text-dim);
   border: 1px dashed var(--panel-edge);
+  transition:
+    color 120ms linear,
+    border-color 120ms linear,
+    background-color 120ms linear;
 
   &[data-dragging="true"] {
     color: var(--yellow);
+    background: #17170a;
     border-color: var(--yellow);
+  }
+`;
+
+export const submitButtonClass = css`
+  padding: 0.55rem 1.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #08090b;
+  background: var(--yellow);
+  border: none;
+  cursor: pointer;
+  /* 右下の角を斜めに落として HUD のボタンらしくする */
+  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
+  transition: opacity 120ms linear;
+
+  &:hover:not(:disabled) {
+    opacity: 0.85;
+  }
+
+  &:disabled {
+    color: var(--text-dim);
+    background: #2a2c31;
+    cursor: default;
   }
 `;
 
