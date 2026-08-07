@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { css, Style } from "hono/css";
 import { listFiles, resolveBaseUrl, type FileEntry } from "../lib/files.js";
+import { CLIENT_SCRIPT } from "./webScript.js";
 
 const JST_FORMATTER = new Intl.DateTimeFormat("sv-SE", {
   timeZone: "Asia/Tokyo",
@@ -144,7 +145,7 @@ const errorPageClass = css`
   color: #a61b1b;
 `;
 
-function Layout(props: { children: unknown }) {
+function Layout(props: { children: unknown; withScript?: boolean }) {
   return (
     <html lang="ja">
       <head>
@@ -155,6 +156,9 @@ function Layout(props: { children: unknown }) {
       </head>
       <body class={bodyClass}>
         <div class={containerClass}>{props.children}</div>
+        {props.withScript ? (
+          <script dangerouslySetInnerHTML={{ __html: CLIENT_SCRIPT }}></script>
+        ) : null}
       </body>
     </html>
   );
@@ -257,7 +261,7 @@ app.get("/", async (c) => {
   }
 
   return c.html(
-    <Layout>
+    <Layout withScript>
       <h1>Timothy</h1>
       <UploadForm />
       <FileTable files={files} nowMs={Date.now()} />

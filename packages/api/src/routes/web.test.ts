@@ -142,4 +142,24 @@ describe("GET /", () => {
     const html = await (await app.request("/")).text();
     expect(html).not.toContain('id="upload-form"');
   });
+
+  it("embeds the client script on the list page", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("addEventListener");
+    expect(html).toContain('"/upload"');
+  });
+
+  it("does not embed the client script on the error page", async () => {
+    vi.mocked(listFiles).mockRejectedValue(new Error("Firestore is down"));
+    const html = await (await app.request("/")).text();
+    expect(html).not.toContain("addEventListener");
+  });
+});
+
+describe("CLIENT_SCRIPT", () => {
+  it("does not contain a closing script tag that would break embedding", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    expect(CLIENT_SCRIPT).not.toContain("</script>");
+  });
 });
