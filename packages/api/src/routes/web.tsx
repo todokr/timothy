@@ -1,11 +1,16 @@
 import { Hono } from "hono";
-import { Style } from "hono/css";
+import { Style, cx } from "hono/css";
 import { raw } from "hono/html";
 import { listFiles, resolveBaseUrl, type FileEntry } from "../lib/files.js";
 import { CLIENT_SCRIPT } from "./webScript.js";
 import {
   globalStyles,
   containerClass,
+  headerClass,
+  statusClass,
+  stepRuleClass,
+  panelClass,
+  railClass,
   tableClass,
   badgeClass,
   formClass,
@@ -36,6 +41,38 @@ export function isExpired(iso: string, nowMs: number): boolean {
 // ブラウザが互換モード (quirks mode) で描画するのを防ぐ。
 const DOCTYPE = raw("<!DOCTYPE html>");
 
+// 画面端に流す装飾用の文字列。意味は無い。
+const RAIL_TEXT = "01001100 0110 10 001101 0111 1001 0010 1101 0011 ".repeat(24);
+
+function DataRails() {
+  return (
+    <>
+      <div class={railClass} data-side="left" aria-hidden="true">
+        {RAIL_TEXT}
+      </div>
+      <div class={railClass} data-side="right" aria-hidden="true">
+        {RAIL_TEXT}
+      </div>
+    </>
+  );
+}
+
+function Header(props: { fileCount?: number }) {
+  return (
+    <>
+      <h1 class={headerClass}>
+        Timothy
+        {props.fileCount === undefined ? null : (
+          <span class={statusClass}>
+            FILES: {String(props.fileCount).padStart(2, "0")}
+          </span>
+        )}
+      </h1>
+      <div class={stepRuleClass} aria-hidden="true"></div>
+    </>
+  );
+}
+
 function Layout(props: { children: unknown; withScript?: boolean }) {
   return (
     <>
@@ -48,6 +85,7 @@ function Layout(props: { children: unknown; withScript?: boolean }) {
           <Style>{globalStyles}</Style>
         </head>
         <body>
+          <DataRails />
           <div class={containerClass}>{props.children}</div>
           {props.withScript ? (
             <script dangerouslySetInnerHTML={{ __html: CLIENT_SCRIPT }}></script>
@@ -60,11 +98,11 @@ function Layout(props: { children: unknown; withScript?: boolean }) {
 
 function FileTable(props: { files: FileEntry[]; nowMs: number }) {
   if (props.files.length === 0) {
-    return <p class={emptyClass}>まだファイルがありません</p>;
+    return <p class={cx(emptyClass, panelClass)}>まだファイルがありません</p>;
   }
 
   return (
-    <table class={tableClass}>
+    <table class={cx(tableClass, panelClass)}>
       <thead>
         <tr>
           <th>タイトル</th>
@@ -111,7 +149,7 @@ function FileTable(props: { files: FileEntry[]; nowMs: number }) {
 
 function UploadForm() {
   return (
-    <form id="upload-form" class={formClass}>
+    <form id="upload-form" class={cx(formClass, panelClass)}>
       <p id="form-error" class={errorBoxClass} hidden></p>
       <div id="drop-zone" class={dropZoneClass} data-dragging="false">
         ここに HTML ファイルをドラッグ&amp;ドロップ
@@ -148,6 +186,7 @@ app.get("/", async (c) => {
   } catch {
     return c.html(
       <Layout>
+        <Header />
         <p class={errorPageClass}>一覧を取得できませんでした。時間をおいて再読み込みしてください。</p>
       </Layout>,
       500
@@ -156,7 +195,7 @@ app.get("/", async (c) => {
 
   return c.html(
     <Layout withScript>
-      <h1>Timothy</h1>
+      <Header fileCount={files.length} />
       <UploadForm />
       <FileTable files={files} nowMs={Date.now()} />
     </Layout>

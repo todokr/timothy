@@ -173,6 +173,12 @@ describe("GET /", () => {
     const html = await (await app.request("/")).text();
     expect(html).toMatch(/color-scheme:\s*dark/);
   });
+
+  it("hides the decorative rails from assistive technology", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain('aria-hidden="true"');
+  });
 });
 
 describe("CLIENT_SCRIPT", () => {
