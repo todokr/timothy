@@ -114,6 +114,43 @@ tim delete <id>
 tim delete <id> --force
 ```
 
+## Upgrading an Existing Deployment
+
+**Read this before deploying this version over an older one.** Two access-control
+changes can lock you out of your own instance.
+
+### `XFF_TRUSTED_HOPS` — set it to `2` if you run a load balancer
+
+Earlier versions read the client IP from the **first** entry of `X-Forwarded-For`.
+This version reads the entry `XFF_TRUSTED_HOPS` positions back from the **end**,
+defaulting to `1`.
+
+- **Running Google Cloud Load Balancer or Cloud Armor in front of Cloud Run?**
+  Set `XFF_TRUSTED_HOPS=2` **before** deploying this version. Otherwise the
+  allowlist compares the load balancer's address instead of the caller's, matches
+  nothing, and denies **everyone** — your admin UI and your existing share links
+  alike — with a bare `403` and no diagnostic in the response.
+
+  ```bash
+  gcloud run services update timothy-api \
+    --region asia-northeast1 \
+    --set-env-vars XFF_TRUSTED_HOPS=2
+  ```
+
+- **Bare `*.run.app` service, or a Lambda Function URL?** No change needed. Those
+  add exactly one hop, so the default of `1` is already correct.
+
+### `ALLOWED_IPS` now also gates the management endpoints
+
+`ALLOWED_IPS` previously covered only the share URLs. It now also gates `/upload`,
+`/files` and `/files/*` (as well as the new web UI at `/`).
+
+If you set `ALLOWED_IPS`, anything that calls those endpoints from an address
+outside the list will start failing with `403` — most commonly a CI job that runs
+`tim upload`, or a developer uploading from a home or office network you never
+had to allow before. Add those source addresses to `ALLOWED_IPS` before you
+deploy.
+
 ## Self-Hosting
 
 Timothy's backend (`@timothy/api`) runs on Cloud Run with Firestore and Cloud Storage.

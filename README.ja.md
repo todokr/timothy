@@ -104,6 +104,30 @@ tim delete <id>
 tim delete <id> --force
 ```
 
+## 既存デプロイのアップグレード
+
+**このバージョンを既存の環境に上書きデプロイする前に、必ず読んでください。** アクセス制御まわりの変更が2点あり、いずれも自分自身を締め出す可能性があります。
+
+### `XFF_TRUSTED_HOPS` — ロードバランサーを使っているなら `2` に設定する
+
+従来はクライアントIPを `X-Forwarded-For` の**先頭**エントリから読み取っていました。このバージョンでは**末尾から** `XFF_TRUSTED_HOPS` 個目のエントリを読み取ります（デフォルトは `1`）。
+
+- **Cloud Runの前段にGoogle Cloud Load BalancerやCloud Armorを置いている場合**、このバージョンをデプロイする**前に** `XFF_TRUSTED_HOPS=2` を設定してください。設定しないと、許可リストはアクセス元ではなくロードバランサーのアドレスと照合されるため何にもマッチせず、管理画面も既存の共有URLも含めて**すべてのリクエスト**が拒否されます。レスポンスは素の `403` のみで、原因を示す情報は返りません。
+
+  ```bash
+  gcloud run services update timothy-api \
+    --region asia-northeast1 \
+    --set-env-vars XFF_TRUSTED_HOPS=2
+  ```
+
+- **`*.run.app` を直接公開している場合やLambda Function URLの場合**は変更不要です。追記されるホップがちょうど1段なので、デフォルトの `1` が正しい値です。
+
+### `ALLOWED_IPS` が管理系エンドポイントにも適用されるようになった
+
+`ALLOWED_IPS` はこれまで共有URLにのみ適用されていましたが、`/upload`・`/files`・`/files/*`（および新しいWeb UIの `/`）にも適用されるようになりました。
+
+`ALLOWED_IPS` を設定している場合、許可リスト外のアドレスからこれらのエンドポイントを呼ぶと `403` で失敗するようになります。よくあるのは `tim upload` を実行するCIジョブや、これまで許可する必要のなかった自宅・オフィスのネットワークからアップロードする開発者です。デプロイ前に、これらの送信元アドレスを `ALLOWED_IPS` に追加してください。
+
 ## セルフホスティング
 
 Timothyのバックエンド（`@timothy/api`）は、FirestoreとCloud StorageをバックエンドにCloud Run上で動作します。
