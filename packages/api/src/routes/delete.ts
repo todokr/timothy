@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { db } from "../lib/firebase.js";
-import { deleteFile } from "../lib/storage.js";
+import { deleteFile, isNotFoundError } from "../lib/storage.js";
 
 const HTML_FILES_COLLECTION = "htmlFiles";
 
@@ -17,7 +17,17 @@ app.delete("/:id", async (c) => {
   }
 
   const data = doc.data()!;
-  await deleteFile(data.storagePath);
+
+  // アップロードは Firestore への書き込みが先で GCS への PUT が後なので、
+  // PUT が失敗すると保存先のオブジェクトが無いレコードが残る。
+  // それを削除できないとユーザーが手詰まりになるため、404 は無視して
+  // レコードの削除まで進める。
+  try {
+    await deleteFile(data.storagePath);
+  } catch (error) {
+    if (!isNotFoundError(error)) throw error;
+  }
+
   await docRef.delete();
 
   return c.json({ id });

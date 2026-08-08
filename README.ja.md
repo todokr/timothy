@@ -11,6 +11,7 @@ LLMが生成したHTMLをターミナルからアップロードし、有効期�
 - HTMLをファイルまたは標準入力からアップロード
 - 有効期限付きURLで共有（デフォルト: 7日間）
 - アップロード済みファイルの一覧表示・削除をCLIで操作
+- APIが配信するWeb UIからファイルの一覧表示とアップロードができる
 - セルフホスト: ストレージとアクセスを自分で管理
 
 ## 仕組み
@@ -24,7 +25,7 @@ URLはCloud Run上のAPIを経由して配信されます。APIがプライベ�
 ## 必要なもの
 
 - デプロイ済みの `@timothy/api`（[セルフホスティング](#セルフホスティング) を参照）
-- サーバー管理者から発行されたAPIキー
+- そのインスタンスへのネットワーク到達性（管理者が `ALLOWED_IPS` を設定している場合、許可されたアドレスから接続する必要があります）
 
 ## インストール
 
@@ -42,11 +43,10 @@ npx timothy-cli <command>
 
 ### セットアップ
 
-APIキーとエンドポイントを保存します:
+APIエンドポイントを保存します:
 
 ```bash
 tim setup
-# API key: xxxxxxxxxxxxxxxxxxxx
 # API endpoint [https://api.timothy.example.com]: https://your-api.example.com
 ```
 
@@ -77,6 +77,22 @@ ID                          TITLE             CREATED       EXPIRES
 01JWABC...                  分析結果            2026-05-18    2026-05-25
 ```
 
+### Web UI
+
+ブラウザでAPIエンドポイントを開くと、管理画面が表示されます:
+
+```
+https://your-api.example.com/
+```
+
+ここから、アップロード済みファイル（タイトル・説明・共有URL・有効期限・作成日時）の一覧表示、
+ファイルを選択またはドラッグ＆ドロップしてのHTMLファイルのアップロード、共有URLのコピー、
+ファイルの削除ができます。期限切れのファイルも「期限切れ」バッジ付きで一覧に残るため、
+削除操作は引き続き行えます。
+
+Web UIのアップロードはCLIと同じ署名付きURLのフローを使うため、ストレージバケットに
+CORSの設定が必要です。[セルフホスティング](#セルフホスティング) を参照してください。
+
 ### 削除
 
 ```bash
@@ -87,6 +103,30 @@ tim delete <id>
 # 確認プロンプトをスキップ
 tim delete <id> --force
 ```
+
+## 既存デプロイのアップグレード
+
+**このバージョンを既存の環境に上書きデプロイする前に、必ず読んでください。** アクセス制御まわりの変更が2点あり、いずれも自分自身を締め出す可能性があります。
+
+### `XFF_TRUSTED_HOPS` — ロードバランサーを使っているなら `2` に設定する
+
+従来はクライアントIPを `X-Forwarded-For` の**先頭**エントリから読み取っていました。このバージョンでは**末尾から** `XFF_TRUSTED_HOPS` 個目のエントリを読み取ります（デフォルトは `1`）。
+
+- **Cloud Runの前段にGoogle Cloud Load BalancerやCloud Armorを置いている場合**、このバージョンをデプロイする**前に** `XFF_TRUSTED_HOPS=2` を設定してください。設定しないと、許可リストはアクセス元ではなくロードバランサーのアドレスと照合されるため何にもマッチせず、管理画面も既存の共有URLも含めて**すべてのリクエスト**が拒否されます。レスポンスは素の `403` のみで、原因を示す情報は返りません。
+
+  ```bash
+  gcloud run services update timothy-api \
+    --region asia-northeast1 \
+    --set-env-vars XFF_TRUSTED_HOPS=2
+  ```
+
+- **`*.run.app` を直接公開している場合やLambda Function URLの場合**は変更不要です。追記されるホップがちょうど1段なので、デフォルトの `1` が正しい値です。
+
+### `ALLOWED_IPS` が管理系エンドポイントにも適用されるようになった
+
+`ALLOWED_IPS` はこれまで共有URLにのみ適用されていましたが、`/upload`・`/files`・`/files/*`（および新しいWeb UIの `/`）にも適用されるようになりました。
+
+`ALLOWED_IPS` を設定している場合、許可リスト外のアドレスからこれらのエンドポイントを呼ぶと `403` で失敗するようになります。よくあるのは `tim upload` を実行するCIジョブや、これまで許可する必要のなかった自宅・オフィスのネットワークからアップロードする開発者です。デプロイ前に、これらの送信元アドレスを `ALLOWED_IPS` に追加してください。
 
 ## セルフホスティング
 
@@ -230,48 +270,28 @@ gcloud run deploy timothy-api \
 `--set-secrets FIREBASE_CLIENT_EMAIL=FIREBASE_CLIENT_EMAIL:latest --set-secrets FIREBASE_PRIVATE_KEY=FIREBASE_PRIVATE_KEY:latest`
 を指定してください。
 
-注: `--allow-unauthenticated` は共有URL（`/s/<id>`）をリンクを知っている人が誰でも開けるようにするために必要です。アップロード・一覧・削除エンドポイントはアプリケーションレベルのAPIキーで保護されています。
+注: `--allow-unauthenticated` は共有URL（`/s/<id>`）をリンクを知っている人が誰でも開けるようにするために必要です。同時にWeb UIと管理系エンドポイントも公開されるため、実運用に使う前に必ずステップ7を読んでください。
 
-デプロイ後に表示されるサービスURLをメモしてください（ステップ8で使用します）。
+デプロイ後に表示されるサービスURLをメモしてください（ステップ9で使用します）。
 
-### 7. APIキーの発行
+### 7. 管理系エンドポイントに誰がアクセスできるかを理解する
 
-seedスクリプトを使ってFirestoreの `apiKeys` コレクションにエントリを追加します。
-`gcloud auth application-default login` でローカル認証済みならキーファイルは不要です:
+**アプリケーションレベルの認証はありません。`ALLOWED_IPS` を設定しない限り、URLを知っている人は誰でもファイルの一覧取得・アップロード・削除ができます。** Web UI（`/`）とその裏側の `/upload`・`/files`・`/files/<id>` は、インターネット全体に対して開いた状態です。`DELETE /files/<id>` は認証なしのHTTPリクエスト1本で、保存済みのファイルをすべて消せてしまいます。
 
-```bash
-FIREBASE_PROJECT_ID=${PROJECT} \
-API_KEY=$(openssl rand -hex 32) \
-USER_ID=user@example.com \
-npx tsx packages/api/scripts/seed-api-key.ts
-```
+アプリ側の対策は `ALLOWED_IPS`（ステップ8）だけですが、これまでのドキュメントが伏せていたトレードオフがあります。
 
-それ以外の場合は、手順3で作成したサービスアカウントキーを使用します:
+- `ALLOWED_IPS` は**共有URLにも適用されます**。管理画面だけを許可リストで守り、`/s/<id>` は開いたままにする、という設定はできません。
+- つまり、社外・ネットワーク外の相手にリンクを共有する用途（本ツールの本来の使い方）では、`ALLOWED_IPS` で管理画面を保護することはできません。
 
-```bash
-FIREBASE_PROJECT_ID=${PROJECT} \
-FIREBASE_CLIENT_EMAIL=$(cat serviceAccount.json | jq -r .client_email) \
-FIREBASE_PRIVATE_KEY=$(cat serviceAccount.json | jq -r .private_key) \
-API_KEY=$(openssl rand -hex 32) \
-USER_ID=user@example.com \
-npx tsx packages/api/scripts/seed-api-key.ts
-```
+その場合は、アプリケーション層ではなくインフラ層でアクセスを制限してください。手間の少ない順に挙げると:
 
-表示されたAPIキーをメモし、Cloud RunサービスのURLとともにユーザーに共有してください。
-
-または、Firebaseコンソールから Firestore > `apiKeys` コレクションに手動で追加することもできます:
-
-```json
-{
-  "key": "xxxxxxxxxxxxxxxxxxxx",
-  "userId": "user@example.com",
-  "createdAt": "<Timestamp>"
-}
-```
+- `--allow-unauthenticated` をやめ、認証プロキシ（Identity-Aware Proxy、IAP付きロードバランサ、あるいはCloud Run IAM + `gcloud run services proxy`）をサービスの前段に置き、共有URLは別デプロイまたは署名付きURLの入口から配信する。
+- 同じイメージからCloud Runサービスを2つデプロイし、片方は `/s/*` 専用の公開サービス、もう片方は管理画面と管理系エンドポイント用のIAM保護／IP制限付きサービスにする。
+- 使い捨てや個人用インスタンスと割り切って公開を受け入れ、サービスURL自体を秘密として扱う。
 
 ### 8. （オプション）IPアドレス制限の設定
 
-共有ファイルの閲覧者をIPアドレスで制限する場合、Cloud Runの `ALLOWED_IPS` 環境変数にカンマ区切りでIPまたはCIDRを設定します:
+APIへのアクセスを制限する場合、Cloud Runの `ALLOWED_IPS` 環境変数にカンマ区切りでIPまたはCIDRを設定します:
 
 ```bash
 gcloud run services update timothy-api \
@@ -279,16 +299,68 @@ gcloud run services update timothy-api \
   --set-env-vars ALLOWED_IPS="203.0.113.0/24,198.51.100.42"
 ```
 
-`ALLOWED_IPS` を設定しない場合、共有URLは任意のIPからアクセス可能です。
+`ALLOWED_IPS` はWeb UI（`/`）、管理系エンドポイント（`/upload`、`/files`、`/files/<id>`）、
+共有エンドポイント（`/s/*`）に適用されます。**未設定の場合はすべてのリクエストが許可され、
+URLを知っている人は誰でもファイルの一覧取得・アップロード・削除ができます。** 設定すると
+CLIからのアクセスも、共有URLを開く相手も、このIPアドレスに制限される点に注意してください
+（ステップ7を参照）。
+
+クライアントIPは `X-Forwarded-For` の**末尾から** `XFF_TRUSTED_HOPS` 個目のエントリから
+判定します。前段のプロキシは自分が実際に観測した接続元アドレスを末尾に追記していくため、
+信頼できるのは自分で用意したプロキシが追記した範囲だけで、それより前のエントリは
+攻撃者が自由に詐称できます。
+
+| 環境変数 | 既定値 | 意味 |
+|---|---|---|
+| `ALLOWED_IPS` | 未設定（全リクエスト許可） | `/`、`/upload`、`/files`、`/files/<id>`、`/s/*` へのアクセスを許可するIP・CIDRのカンマ区切り |
+| `XFF_TRUSTED_HOPS` | `1` | サービスの前段で `X-Forwarded-For` に追記するプロキシの段数。末尾からこの数だけ遡ったエントリをクライアントIPとして採用する |
+
+既定値の `1` は、`*.run.app` の素のCloud Runサービス（およびLambda Function URL）のように
+1エントリだけが追記される構成に対応します。Google Cloud Load Balancer や Cloud Armor を
+前段に置く場合は2エントリ追記されるため、`XFF_TRUSTED_HOPS=2` を設定してください:
+
+```bash
+gcloud run services update timothy-api \
+  --region ${REGION} \
+  --set-env-vars XFF_TRUSTED_HOPS=2
+```
+
+この値は正確に設定してください。**小さすぎると、呼び出し側が自分で `X-Forwarded-For` を
+付けて許可リストを詐称できてしまいます**（詐称した値が、信頼している位置に入り込むため）。
+逆に大きすぎるとエントリ数が足りず、すべてのリクエストが拒否されます。エントリ数が
+`XFF_TRUSTED_HOPS` に満たないヘッダーは、設定したプロキシを経由していないものとして拒否します。
 
 ### 9. CLIの設定
 
-ユーザーはAPIキーとCloud RunサービスのURLを使ってCLIを設定します:
+ユーザーはCloud RunサービスのURLを使ってCLIを設定します:
 
 ```bash
 tim setup
-# API key: xxxxxxxxxxxxxxxxxxxx
 # API endpoint [https://api.timothy.example.com]: https://timothy-api-xxxx-an.a.run.app
+```
+
+### バケットのCORS設定
+
+Web UIはブラウザから署名付きURLを使って直接Cloud Storageにアップロードします。
+バケットにCORSを設定していないと、このアップロードは失敗します（CLIは影響を受けません）。
+
+`cors.json` を作成し、オリジンをご自身のAPIエンドポイントに置き換えてください:
+
+```json
+[
+  {
+    "origin": ["https://your-api.example.com"],
+    "method": ["PUT"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]
+```
+
+適用します:
+
+```bash
+gcloud storage buckets update gs://YOUR_BUCKET --cors-file=cors.json
 ```
 
 ### インフラ構成
@@ -298,7 +370,7 @@ tim setup
 | Cloud Run | 最小インスタンス: 0、最大インスタンス: 2、認証なし（allow-unauthenticated） |
 | Cloud Storage | パブリックアクセス禁止・Cloud Run APIを経由してプロキシ配信 |
 | Firestore | Admin SDK経由のみ書き込み可・Firebase CLIでルール・インデックスを管理 |
-| 認証 | アップロード・一覧・削除はAPIキー（Bearerトークン）、共有URLはオプションのIPアドレス制限 |
+| 認証 | **アプリケーションレベルの認証はなし。** オプションの `ALLOWED_IPS` がWeb UI・管理系エンドポイント・共有URLに一律で適用される。未設定ならURLを知っている人は誰でも一覧取得・アップロード・削除が可能 |
 
 ## AWSでのセルフホスティング（Lambda）
 
@@ -410,18 +482,13 @@ aws lambda create-function-url-config \
 
 出力の `FunctionUrl` をメモしてください。これがAPIエンドポイントになります。
 
-### 7. APIキーの発行
+### 7. 管理系エンドポイントに誰がアクセスできるかを理解する
 
-Cloud Run版と同じ手順です。FirebaseサービスアカウントのJSONを使ってseedスクリプトを実行します:
+Cloud Run版と同じ話ですが、`--auth-type NONE` のFunction URLはインターネットに直接公開されるため、こちらの方がより重要です。
 
-```bash
-FIREBASE_PROJECT_ID=your-project-id \
-FIREBASE_CLIENT_EMAIL=$(cat serviceAccount.json | jq -r .client_email) \
-FIREBASE_PRIVATE_KEY=$(cat serviceAccount.json | jq -r .private_key) \
-API_KEY=$(openssl rand -hex 32) \
-USER_ID=user@example.com \
-npx tsx packages/api/scripts/seed-api-key.ts
-```
+**アプリケーションレベルの認証はありません。`ALLOWED_IPS` を設定しない限り、URLを知っている人は誰でもファイルの一覧取得・アップロード・削除ができます。** Web UI（`/`）とその裏側の `/upload`・`/files`・`/files/<id>` がすべて対象です。
+
+アプリ側の対策は `ALLOWED_IPS`（ステップ8）だけで、これは共有URL（`/s/<id>`）にも同じように適用されます。管理画面だけを許可リストで守り共有URLは開いたままにする、という設定はできないため、ネットワーク外の相手にリンクを送る運用では `ALLOWED_IPS` で管理画面を保護できません。その場合はインフラ層で制限してください。たとえばFunction URLを `--auth-type AWS_IAM` に変更し、共有URL用に別の公開デプロイやCloudFrontディストリビューションを用意する、あるいはAPI Gateway / ALB を前段に置いて `/`・`/upload`・`/files*` だけ認証し `/s/*` は開けておく、といった構成が考えられます。
 
 ### 8. （オプション）IPアドレス制限の設定
 
@@ -434,13 +501,36 @@ aws lambda update-function-configuration \
   --region ${AWS_REGION}
 ```
 
+`ALLOWED_IPS` はWeb UI（`/`）、管理系エンドポイント（`/upload`、`/files`、`/files/<id>`）、
+共有エンドポイント（`/s/*`）に一律で適用されます。**未設定の場合はすべてのリクエストが
+許可されます。** クライアントIPは `X-Forwarded-For` の**末尾から** `XFF_TRUSTED_HOPS`
+個目のエントリから判定します。
+
+| 環境変数 | 既定値 | 意味 |
+|---|---|---|
+| `ALLOWED_IPS` | 未設定（全リクエスト許可） | `/`、`/upload`、`/files`、`/files/<id>`、`/s/*` へのアクセスを許可するIP・CIDRのカンマ区切り |
+| `XFF_TRUSTED_HOPS` | `1` | 関数の前段で `X-Forwarded-For` に追記するプロキシの段数。末尾からこの数だけ遡ったエントリをクライアントIPとして採用する |
+
+既定値の `1` は、Lambda Function URL（および素のCloud Runサービス）のように1エントリだけが
+追記される構成に対応します。CloudFront・ALB・API Gateway を前段に置く場合や、Cloud Run側で
+Google Cloud Load Balancer / Cloud Armor を挟む場合は、追記するプロキシの段数を数えて
+`XFF_TRUSTED_HOPS` に設定してください（例: `2`）。
+
+この値は正確に設定してください。**小さすぎると、呼び出し側が自分で `X-Forwarded-For` を
+付けて許可リストを詐称できてしまいます。** 逆に大きすぎるとすべてのリクエストが拒否されます。
+エントリ数が `XFF_TRUSTED_HOPS` に満たないヘッダーは、設定したプロキシを経由していないものとして
+拒否されるためです。
+
 ### 9. CLIの設定
 
 ```bash
 tim setup
-# API key: xxxxxxxxxxxxxxxxxxxx
 # API endpoint [https://api.timothy.example.com]: https://xxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws
 ```
+
+Web UIを使う場合、ここでもCloud Run版と同様にストレージバケットへのCORS設定が必要です。
+これはコンピュート層とは無関係です。上記の
+[バケットのCORS設定](#バケットのcors設定) を参照してください。
 
 ### インフラ構成
 
@@ -449,7 +539,7 @@ tim setup
 | Lambda | コンテナイメージ（`Dockerfile.lambda`）、Function URL（認証なし） |
 | Cloud Storage | Firebase Cloud Storage・Lambdaを経由してプロキシ配信 |
 | Firestore | Firebase Firestore・Cloud Run版と共用可 |
-| 認証 | アップロード・一覧・削除はAPIキー（Bearerトークン）、共有URLはオプションのIPアドレス制限 |
+| 認証 | **アプリケーションレベルの認証はなし。** オプションの `ALLOWED_IPS` がWeb UI・管理系エンドポイント・共有URLに一律で適用される。未設定ならURLを知っている人は誰でも一覧取得・アップロード・削除が可能 |
 
 ## ライセンス
 

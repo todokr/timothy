@@ -11,6 +11,7 @@ A self-hosted CLI tool to upload LLM-generated HTML and share it via time-limite
 - Upload HTML from a file or stdin
 - Share via a time-limited URL (default: 7 days)
 - List and delete your uploaded files from the CLI
+- Browse and upload files from a web UI served by the API
 - Self-hosted: you control the storage and access
 
 ## How It Works
@@ -24,7 +25,7 @@ The URL is served through your Cloud Run API, which fetches the file from privat
 ## Requirements
 
 - A deployed instance of `@timothy/api` (see [Self-Hosting](#self-hosting))
-- An API key issued by the server admin
+- Network access to it (if the admin set `ALLOWED_IPS`, you must connect from an allowed address)
 
 ## Installation
 
@@ -50,7 +51,7 @@ npx timothy-cli <command>
 
 ### Setup
 
-Save your API key and endpoint:
+Save your API endpoint:
 
 ```bash
 tim setup
@@ -84,6 +85,23 @@ ID                          TITLE             CREATED       EXPIRES
 01JWABC...                  Analysis          2026-05-18    2026-05-25
 ```
 
+### Web UI
+
+Open your API endpoint in a browser to get a management page:
+
+```
+https://your-api.example.com/
+```
+
+From there you can browse your uploaded files (title, description, share
+URL, expiry, and creation date), upload a new HTML file by picking it or
+dragging it onto the page, copy share URLs, and delete files. Expired files
+stay listed with an "expired" badge so you can still delete them.
+
+The web UI uploads through the same signed-URL flow as the CLI, so it
+requires CORS to be configured on your storage bucket. See
+[Self-Hosting](#self-hosting).
+
 ### Delete
 
 ```bash
@@ -94,6 +112,43 @@ tim delete <id>
 # Skip confirmation
 tim delete <id> --force
 ```
+
+## Upgrading an Existing Deployment
+
+**Read this before deploying this version over an older one.** Two access-control
+changes can lock you out of your own instance.
+
+### `XFF_TRUSTED_HOPS` — set it to `2` if you run a load balancer
+
+Earlier versions read the client IP from the **first** entry of `X-Forwarded-For`.
+This version reads the entry `XFF_TRUSTED_HOPS` positions back from the **end**,
+defaulting to `1`.
+
+- **Running Google Cloud Load Balancer or Cloud Armor in front of Cloud Run?**
+  Set `XFF_TRUSTED_HOPS=2` **before** deploying this version. Otherwise the
+  allowlist compares the load balancer's address instead of the caller's, matches
+  nothing, and denies **everyone** — your admin UI and your existing share links
+  alike — with a bare `403` and no diagnostic in the response.
+
+  ```bash
+  gcloud run services update timothy-api \
+    --region asia-northeast1 \
+    --set-env-vars XFF_TRUSTED_HOPS=2
+  ```
+
+- **Bare `*.run.app` service, or a Lambda Function URL?** No change needed. Those
+  add exactly one hop, so the default of `1` is already correct.
+
+### `ALLOWED_IPS` now also gates the management endpoints
+
+`ALLOWED_IPS` previously covered only the share URLs. It now also gates `/upload`,
+`/files` and `/files/*` (as well as the new web UI at `/`).
+
+If you set `ALLOWED_IPS`, anything that calls those endpoints from an address
+outside the list will start failing with `403` — most commonly a CI job that runs
+`tim upload`, or a developer uploading from a home or office network you never
+had to allow before. Add those source addresses to `ALLOWED_IPS` before you
+deploy.
 
 ## Self-Hosting
 
@@ -237,49 +292,42 @@ gcloud run deploy timothy-api \
 If you registered `FIREBASE_CLIENT_EMAIL`/`FIREBASE_PRIVATE_KEY` secrets in step 5 instead,
 add `--set-secrets FIREBASE_CLIENT_EMAIL=FIREBASE_CLIENT_EMAIL:latest --set-secrets FIREBASE_PRIVATE_KEY=FIREBASE_PRIVATE_KEY:latest`.
 
-Note: `--allow-unauthenticated` is required so that share URLs (`/s/<id>`) are accessible to anyone who knows the link. Upload and list/delete endpoints are protected by the API key at the application level.
+Note: `--allow-unauthenticated` is required so that share URLs (`/s/<id>`) are accessible to anyone who knows the link. It also exposes the web UI and the management endpoints — read step 7 before you use this deployment for anything real.
 
-After deploying, note the service URL printed by the command — you'll need it in step 8.
+After deploying, note the service URL printed by the command — you'll need it in step 9.
 
-### 7. Issue an API key
+### 7. Understand who can reach the management endpoints
 
-Add an entry to Firestore's `apiKeys` collection using the seed script. If you're
-authenticated locally via `gcloud auth application-default login` with access to the
-project, no key file is needed:
+**There is no application-level authentication. With `ALLOWED_IPS` unset, anyone
+who knows the URL can list, upload, and delete files** — the web UI at `/`, and
+the `/upload`, `/files` and `/files/<id>` endpoints behind it, are open to the
+whole internet. The `DELETE /files/<id>` endpoint is a single unauthenticated
+HTTP request away from wiping every file you have stored.
 
-```bash
-FIREBASE_PROJECT_ID=${PROJECT} \
-API_KEY=$(openssl rand -hex 32) \
-USER_ID=user@example.com \
-npx tsx packages/api/scripts/seed-api-key.ts
-```
+`ALLOWED_IPS` (step 8) is the only in-app control, and it comes with a tension
+the rest of this guide used to hide:
 
-Otherwise, use the service account key from step 3:
+- `ALLOWED_IPS` applies to **share URLs too**, not just the admin UI. There is no
+  way to allowlist the admin surface while leaving `/s/<id>` open.
+- So if you share links with people outside your network — which is the point of
+  this tool — you cannot use `ALLOWED_IPS` to protect the admin UI.
 
-```bash
-FIREBASE_PROJECT_ID=${PROJECT} \
-FIREBASE_CLIENT_EMAIL=$(cat serviceAccount.json | jq -r .client_email) \
-FIREBASE_PRIVATE_KEY=$(cat serviceAccount.json | jq -r .private_key) \
-API_KEY=$(openssl rand -hex 32) \
-USER_ID=user@example.com \
-npx tsx packages/api/scripts/seed-api-key.ts
-```
+If that describes you, restrict access at the infrastructure layer instead of at
+the application layer. Options, roughly in order of effort:
 
-Note the printed API key — share it along with the Cloud Run service URL with each user.
-
-Alternatively, add the entry manually via the Firebase console under Firestore > `apiKeys` collection:
-
-```json
-{
-  "key": "xxxxxxxxxxxxxxxxxxxx",
-  "userId": "user@example.com",
-  "createdAt": "<Timestamp>"
-}
-```
+- Drop `--allow-unauthenticated` and put an authenticating proxy
+  (Identity-Aware Proxy, a load balancer with IAP, or Cloud Run IAM plus
+  `gcloud run services proxy`) in front of the service, and serve share URLs from
+  a separate deployment or a signed-URL front door.
+- Deploy two Cloud Run services from the same image: a public one used only for
+  `/s/*`, and a private, IAM-protected or IP-restricted one for the admin UI and
+  the management endpoints.
+- Accept the exposure only for a throwaway or personal instance, and treat the
+  service URL itself as the secret.
 
 ### 8. (Optional) Restrict access by IP
 
-To limit who can view shared files, set the `ALLOWED_IPS` environment variable on Cloud Run (comma-separated IPs or CIDR ranges):
+To restrict access to the API, set the `ALLOWED_IPS` environment variable on Cloud Run (comma-separated IPs or CIDR ranges):
 
 ```bash
 gcloud run services update timothy-api \
@@ -287,16 +335,72 @@ gcloud run services update timothy-api \
   --set-env-vars ALLOWED_IPS="203.0.113.0/24,198.51.100.42"
 ```
 
-If `ALLOWED_IPS` is not set, share URLs are accessible from any IP.
+`ALLOWED_IPS` applies to the web UI (`/`), the management endpoints
+(`/upload`, `/files`, `/files/<id>`) and the share endpoint (`/s/*`).
+**When it is unset, all requests are allowed — anyone who knows the URL can
+list, upload, and delete files.** Note that setting it also restricts the CLI
+and every share-URL recipient to the listed addresses; see step 7.
+
+The client IP is taken from `X-Forwarded-For`, counting `XFF_TRUSTED_HOPS`
+entries back from the **end** of the header. Every proxy in front of the service
+appends the address it actually observed, so only the entries appended by your
+own proxies are trustworthy — anything earlier in the header is attacker-supplied.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `ALLOWED_IPS` | unset (all requests allowed) | Comma-separated IPs or CIDR ranges permitted to reach `/`, `/upload`, `/files`, `/files/<id>` and `/s/*` |
+| `XFF_TRUSTED_HOPS` | `1` | How many proxies in front of the service append to `X-Forwarded-For`. The client IP is read that many entries back from the end |
+
+The default of `1` matches a bare Cloud Run service on a `*.run.app` URL (and a
+Lambda Function URL), where exactly one entry is appended. If you front the
+service with a Google Cloud Load Balancer or Cloud Armor, two entries are
+appended — set `XFF_TRUSTED_HOPS=2`:
+
+```bash
+gcloud run services update timothy-api \
+  --region ${REGION} \
+  --set-env-vars XFF_TRUSTED_HOPS=2
+```
+
+Get this number right. **Set it too low and callers can spoof the allowlist** by
+sending their own `X-Forwarded-For` header — the value they forge ends up in the
+position you trust. Set it too high and no request has enough entries to satisfy
+it, so every request is denied. A header with fewer entries than
+`XFF_TRUSTED_HOPS` is rejected, because it did not traverse the proxies you
+configured.
 
 ### 9. Configure the CLI
 
-Users can now configure the CLI with their API key and the Cloud Run service URL:
+Users can now configure the CLI with the Cloud Run service URL:
 
 ```bash
 tim setup
-# API key: xxxxxxxxxxxxxxxxxxxx
 # API endpoint [https://api.timothy.example.com]: https://timothy-api-xxxx-an.a.run.app
+```
+
+### Storage bucket CORS
+
+The web UI uploads directly from the browser to Cloud Storage using a signed
+URL. Without CORS configured on the bucket, those uploads fail (the CLI is
+unaffected).
+
+Create `cors.json`, replacing the origin with your API endpoint:
+
+```json
+[
+  {
+    "origin": ["https://your-api.example.com"],
+    "method": ["PUT"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]
+```
+
+Apply it:
+
+```bash
+gcloud storage buckets update gs://YOUR_BUCKET --cors-file=cors.json
 ```
 
 ### Infrastructure Overview
@@ -306,7 +410,7 @@ tim setup
 | Cloud Run | min-instances: 0, max-instances: 2, allow-unauthenticated |
 | Cloud Storage | Public access disabled; proxied through Cloud Run API |
 | Firestore | Write access via Admin SDK only; rules and indexes managed via Firebase CLI |
-| Auth | API key (Bearer token) for upload/list/delete; optional IP allowlist for share URLs |
+| Auth | **None at the application level.** Optional `ALLOWED_IPS` allowlist covering the web UI, management endpoints, and share URLs alike; unset means anyone with the URL can list, upload, and delete |
 
 ## Self-Hosting on AWS (Lambda)
 
@@ -418,18 +522,24 @@ aws lambda create-function-url-config \
 
 Note the `FunctionUrl` in the output — this is your API endpoint.
 
-### 7. Issue an API key
+### 7. Understand who can reach the management endpoints
 
-Same as the Cloud Run setup — use the seed script with the Firebase service account credentials:
+Same as the Cloud Run setup, and it matters more here because
+`--auth-type NONE` puts the Function URL on the public internet.
 
-```bash
-FIREBASE_PROJECT_ID=your-project-id \
-FIREBASE_CLIENT_EMAIL=$(cat serviceAccount.json | jq -r .client_email) \
-FIREBASE_PRIVATE_KEY=$(cat serviceAccount.json | jq -r .private_key) \
-API_KEY=$(openssl rand -hex 32) \
-USER_ID=user@example.com \
-npx tsx packages/api/scripts/seed-api-key.ts
-```
+**There is no application-level authentication. With `ALLOWED_IPS` unset, anyone
+who knows the URL can list, upload, and delete files** — the web UI at `/`, and
+the `/upload`, `/files` and `/files/<id>` endpoints behind it.
+
+`ALLOWED_IPS` (step 8) is the only in-app control, and it also applies to share
+URLs (`/s/<id>`). There is no way to allowlist the admin surface while leaving
+share URLs open, so if you send links to people outside your network you cannot
+use `ALLOWED_IPS` to protect the admin UI. Restrict access at the infrastructure
+layer instead — for example switch the Function URL to
+`--auth-type AWS_IAM` and front the share path with a separate, public
+deployment or a CloudFront distribution, or put the function behind an
+API Gateway / ALB that authenticates `/`, `/upload` and `/files*` while leaving
+`/s/*` open.
 
 ### 8. (Optional) Restrict access by IP
 
@@ -442,13 +552,38 @@ aws lambda update-function-configuration \
   --region ${AWS_REGION}
 ```
 
+`ALLOWED_IPS` covers the web UI (`/`), the management endpoints (`/upload`,
+`/files`, `/files/<id>`) and the share endpoint (`/s/*`) alike.
+**When it is unset, all requests are allowed.** The client IP is read from
+`X-Forwarded-For`, counting `XFF_TRUSTED_HOPS` entries back from the **end** of
+the header.
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `ALLOWED_IPS` | unset (all requests allowed) | Comma-separated IPs or CIDR ranges permitted to reach `/`, `/upload`, `/files`, `/files/<id>` and `/s/*` |
+| `XFF_TRUSTED_HOPS` | `1` | How many proxies in front of the function append to `X-Forwarded-For`. The client IP is read that many entries back from the end |
+
+The default of `1` matches a Lambda Function URL (and a bare Cloud Run service),
+where exactly one entry is appended. If you put CloudFront, an ALB or an API
+Gateway in front — or run behind a Google Cloud Load Balancer / Cloud Armor on
+the Cloud Run deployment — count the proxies that append and set
+`XFF_TRUSTED_HOPS` accordingly, e.g. `2`.
+
+Get this number right. **Set it too low and callers can spoof the allowlist** by
+sending their own `X-Forwarded-For` header. Set it too high and every request is
+denied, since a header with fewer entries than `XFF_TRUSTED_HOPS` is rejected as
+not having traversed the proxies you configured.
+
 ### 9. Configure the CLI
 
 ```bash
 tim setup
-# API key: xxxxxxxxxxxxxxxxxxxx
 # API endpoint [https://api.timothy.example.com]: https://xxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws
 ```
+
+The web UI needs CORS configured on the storage bucket here too, same as the
+Cloud Run setup — this is independent of the compute layer. See
+[Storage bucket CORS](#storage-bucket-cors) above.
 
 ### Infrastructure Overview
 
@@ -457,7 +592,7 @@ tim setup
 | Lambda | Container image (`Dockerfile.lambda`), Function URL (no auth) |
 | Cloud Storage | Firebase Cloud Storage; proxied through Lambda |
 | Firestore | Firebase Firestore; shared with Cloud Run setup |
-| Auth | API key (Bearer token) for upload/list/delete; optional IP allowlist for share URLs |
+| Auth | **None at the application level.** Optional `ALLOWED_IPS` allowlist covering the web UI, management endpoints, and share URLs alike; unset means anyone with the URL can list, upload, and delete |
 
 ## License
 

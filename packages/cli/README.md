@@ -20,11 +20,10 @@ npx timothy-cli <command>
 
 ### Setup
 
-Save your API key and endpoint (run once):
+Save your API endpoint (run once):
 
 ```bash
 tim setup
-# API key: xxxxxxxxxxxxxxxxxxxx
 # API endpoint [https://api.timothy.example.com]: https://your-api.example.com
 ```
 

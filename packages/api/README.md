@@ -12,10 +12,12 @@ firebase emulators:start --only firestore,storage
 
 # 別ターミナルで開発サーバー起動
 pnpm dev
-
-# テスト用APIキーをエミュレータに投入
-pnpm seed:local
 ```
+
+> **注意:** API にアプリケーションレベルの認証はない。`ALLOWED_IPS` を設定しない限り、
+> URL を知っている人は誰でもファイルの一覧取得・アップロード・削除ができる。
+> `ALLOWED_IPS` は共有 URL (`/s/<id>`) にも同じように効くため、管理画面だけを
+> 保護することはできない。詳細はリポジトリルートの README を参照。
 
 ### 環境変数（ローカル）
 
