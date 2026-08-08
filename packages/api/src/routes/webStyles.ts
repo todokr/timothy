@@ -72,104 +72,6 @@ export const headerClass = css`
   color: var(--text);
 `;
 
-export const statusClass = css`
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  font-weight: 400;
-  letter-spacing: 0.18em;
-  color: var(--cyan);
-  white-space: nowrap;
-`;
-
-/**
- * 左から入った罫線が途中で一段下がって右へ抜ける、HUD 風の区切り線。
- * ::before が上段の水平線、::after が縦のつなぎと下段の水平線を描く。
- */
-export const stepRuleClass = css`
-  position: relative;
-  height: 12px;
-  margin-bottom: var(--gap-lg);
-
-  &::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 58%;
-    border-top: 1px solid var(--line-strong);
-  }
-
-  &::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 42%;
-    height: 100%;
-    border-left: 1px solid var(--line-strong);
-    border-bottom: 1px solid var(--line-strong);
-  }
-`;
-
-/** 全周の枠ではなく、対角 2 箇所に L 字のブラケットを出す。 */
-export const panelClass = css`
-  position: relative;
-
-  &::before,
-  &::after {
-    content: "";
-    position: absolute;
-    width: 12px;
-    height: 12px;
-    border-style: solid;
-    border-color: var(--accent);
-    pointer-events: none;
-  }
-
-  &::before {
-    top: -1px;
-    left: -1px;
-    border-width: 1px 0 0 1px;
-  }
-
-  &::after {
-    right: -1px;
-    bottom: -1px;
-    border-width: 0 1px 1px 0;
-  }
-`;
-
-/** 画面端の装飾。内容に意味はないので aria-hidden で隠す。 */
-export const railClass = css`
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  width: 1.25rem;
-  overflow: hidden;
-  font-family: var(--font-mono);
-  font-size: 0.5rem;
-  line-height: 1.2;
-  letter-spacing: 0.05em;
-  text-align: center;
-  word-break: break-all;
-  color: var(--line-strong);
-  opacity: 0.7;
-  pointer-events: none;
-  user-select: none;
-
-  &[data-side="left"] {
-    left: 0;
-  }
-
-  &[data-side="right"] {
-    right: 0;
-  }
-
-  @media (max-width: 70rem) {
-    display: none;
-  }
-`;
-
 export const tableClass = css`
   width: 100%;
   border-collapse: collapse;
@@ -369,21 +271,6 @@ export const errorPageClass = css`
   color: var(--accent);
 `;
 
-export const rowNumberClass = css`
-  width: 2.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.08em;
-  color: var(--text-dim);
-`;
-
-export const urlClass = css`
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.01em;
-  word-break: break-all;
-`;
-
 export const ghostButtonClass = css`
   margin-left: 0.5rem;
   padding: 0.15rem 0.5rem;
@@ -439,17 +326,4 @@ export const rowErrorClass = css`
   font-family: var(--font-mono);
   font-size: 0.625rem;
   color: var(--accent);
-`;
-
-/*
- * --line-strong は罫線用の暗い赤で、文字に使うと 1.74:1 しか出ない。
- * 下の日本語 (--text-dim) との対比は文字色ではなく字間と太さで作る。
- */
-export const emptyTitleClass = css`
-  margin: 0 0 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--text);
 `;

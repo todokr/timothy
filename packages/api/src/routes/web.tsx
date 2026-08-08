@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { Style, cx } from "hono/css";
+import { Style } from "hono/css";
 import { raw } from "hono/html";
 import { listFiles, resolveBaseUrl, type FileEntry } from "../lib/files.js";
 import { CLIENT_SCRIPT } from "./webScript.js";
@@ -7,10 +7,6 @@ import {
   globalStyles,
   containerClass,
   headerClass,
-  statusClass,
-  stepRuleClass,
-  panelClass,
-  railClass,
   tableClass,
   badgeClass,
   formClass,
@@ -18,10 +14,7 @@ import {
   submitButtonClass,
   errorBoxClass,
   emptyClass,
-  emptyTitleClass,
   errorPageClass,
-  rowNumberClass,
-  urlClass,
   ghostButtonClass,
   dangerButtonClass,
   rowErrorClass,
@@ -48,38 +41,6 @@ export function isExpired(iso: string, nowMs: number): boolean {
 // ブラウザが互換モード (quirks mode) で描画するのを防ぐ。
 const DOCTYPE = raw("<!DOCTYPE html>");
 
-// 画面端に流す装飾用の文字列。意味は無い。
-const RAIL_TEXT = "01001100 0110 10 001101 0111 1001 0010 1101 0011 ".repeat(24);
-
-function DataRails() {
-  return (
-    <>
-      <div class={railClass} data-side="left" aria-hidden="true">
-        {RAIL_TEXT}
-      </div>
-      <div class={railClass} data-side="right" aria-hidden="true">
-        {RAIL_TEXT}
-      </div>
-    </>
-  );
-}
-
-function Header(props: { fileCount?: number }) {
-  return (
-    <>
-      <h1 class={headerClass}>
-        Timothy
-        {props.fileCount === undefined ? null : (
-          <span class={statusClass}>
-            FILES: {String(props.fileCount).padStart(2, "0")}
-          </span>
-        )}
-      </h1>
-      <div class={stepRuleClass} aria-hidden="true"></div>
-    </>
-  );
-}
-
 function Layout(props: { children: unknown; withScript?: boolean }) {
   return (
     <>
@@ -92,7 +53,6 @@ function Layout(props: { children: unknown; withScript?: boolean }) {
           <Style>{globalStyles}</Style>
         </head>
         <body>
-          <DataRails />
           <div class={containerClass}>{props.children}</div>
           {props.withScript ? (
             <script dangerouslySetInnerHTML={{ __html: CLIENT_SCRIPT }}></script>
@@ -106,18 +66,16 @@ function Layout(props: { children: unknown; withScript?: boolean }) {
 function FileTable(props: { files: FileEntry[]; nowMs: number }) {
   if (props.files.length === 0) {
     return (
-      <div class={cx(emptyClass, panelClass)}>
-        <p class={emptyTitleClass}>No files</p>
+      <div class={emptyClass}>
         <p>まだファイルがありません</p>
       </div>
     );
   }
 
   return (
-    <table class={cx(tableClass, panelClass)}>
+    <table class={tableClass}>
       <thead>
         <tr>
-          <th></th>
           <th>タイトル</th>
           <th>説明</th>
           <th>共有 URL</th>
@@ -127,14 +85,13 @@ function FileTable(props: { files: FileEntry[]; nowMs: number }) {
         </tr>
       </thead>
       <tbody>
-        {props.files.map((file, index) => {
+        {props.files.map((file) => {
           const expired = isExpired(file.expiresAt, props.nowMs);
           return (
             <tr key={file.id} data-expired={String(expired)}>
-              <td class={rowNumberClass}>{String(index + 1).padStart(2, "0")}</td>
               <td>{file.title}</td>
               <td>{file.description}</td>
-              <td class={urlClass}>
+              <td>
                 <a href={file.url} target="_blank" rel="noreferrer">
                   {file.url}
                 </a>
@@ -163,7 +120,7 @@ function FileTable(props: { files: FileEntry[]; nowMs: number }) {
 
 function UploadForm() {
   return (
-    <form id="upload-form" class={cx(formClass, panelClass)}>
+    <form id="upload-form" class={formClass}>
       <p id="form-error" class={errorBoxClass} hidden></p>
       <div id="drop-zone" class={dropZoneClass} data-dragging="false">
         ここに HTML ファイルをドラッグ&amp;ドロップ
@@ -200,7 +157,7 @@ app.get("/", async (c) => {
   } catch {
     return c.html(
       <Layout>
-        <Header />
+        <h1 class={headerClass}>Timothy</h1>
         <p class={errorPageClass}>一覧を取得できませんでした。時間をおいて再読み込みしてください。</p>
       </Layout>,
       500
@@ -209,7 +166,7 @@ app.get("/", async (c) => {
 
   return c.html(
     <Layout withScript>
-      <Header fileCount={files.length} />
+      <h1 class={headerClass}>Timothy</h1>
       <UploadForm />
       <FileTable files={files} nowMs={Date.now()} />
     </Layout>
