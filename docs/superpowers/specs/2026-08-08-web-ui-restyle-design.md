@@ -168,7 +168,17 @@ CLI 側でも列揃えを修正した経緯があり（コミット `85da98d`）
 | `ghostButtonClass` | 開く・URL をコピー | 背景透明、`1px solid var(--gray-200)`、文字 `--gray-700`、`height: 1.75rem`。hover で背景 `--gray-100` |
 | `dangerButtonClass` | 削除 | 背景透明、枠線なし、文字 `--danger`、`height: 1.75rem`。hover で背景 `--danger-soft` |
 
-いずれも `:focus-visible` で `box-shadow: 0 0 0 3px var(--accent-soft)`。
+いずれも `:focus-visible` で
+`box-shadow: 0 0 0 2px var(--gray-0), 0 0 0 4px var(--accent)` の二重リングを出す。
+
+内側の白 2px でボタンの塗りと外側のリングを切り離し、外側の `--accent` 2px で輪郭を示す。
+入力欄と同じ `0 0 0 3px var(--accent-soft)` の単層リングにしてはならない。
+`--accent-soft` は白背景に対して 1.10:1 しかなく、フォーカスが見えないため。
+入力欄の場合は `border-color: var(--accent)`（4.90:1 以上）を併用しているので単層で足りるが、
+ボタンには枠線の色替えという逃げ道がない。
+
+二重リングの外側の比は白背景で 5.17:1、`--gray-50` の上で 4.90:1。
+WCAG 1.4.11（UI コンポーネントの境界は 3:1）を満たす。
 
 `ghostButtonClass` は現行 `margin-left: 0.5rem` を持つが、共有列で 2 つ並べるため
 外側の余白は親の `gap` で作る。この宣言は削除する。
