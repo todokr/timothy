@@ -34,13 +34,13 @@
 | `--gray-200` | `#e9ecef` |
 | `--gray-300` | `#dee2e6` |
 | `--gray-400` | `#adb5bd` |
-| `--gray-500` | `#868e96` |
+| `--gray-500` | `#6b7280` |
 | `--gray-700` | `#495057` |
 | `--gray-900` | `#212529` |
 | `--accent` | `#2563eb` |
 | `--accent-hover` | `#1d4ed8` |
 | `--accent-soft` | `#eff4ff` |
-| `--danger` | `#e03131` |
+| `--danger` | `#c92a2a` |
 | `--danger-soft` | `#fff5f5` |
 | `--radius-sm` | `6px` |
 | `--radius-md` | `10px` |
@@ -275,7 +275,7 @@ export const globalStyles = css`
     --gray-200: #e9ecef;
     --gray-300: #dee2e6;
     --gray-400: #adb5bd;
-    --gray-500: #868e96;
+    --gray-500: #6b7280;
     --gray-700: #495057;
     --gray-900: #212529;
 
@@ -283,7 +283,7 @@ export const globalStyles = css`
     --accent-hover: #1d4ed8;
     --accent-soft: #eff4ff;
 
-    --danger: #e03131;
+    --danger: #c92a2a;
     --danger-soft: #fff5f5;
 
     --radius-sm: 6px;
