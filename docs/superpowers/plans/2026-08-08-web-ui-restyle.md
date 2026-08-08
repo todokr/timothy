@@ -21,7 +21,7 @@
 - 外部フォント・外部アセットは読み込まない。
 - コマンドはリポジトリルートから実行する。ビルド `pnpm --filter @timothy/api run build`、テスト `pnpm --filter @timothy/api run test`、lint `pnpm lint`。3 つとも成功する状態を保つこと。
 - **`.secretlintrc` などのセキュリティ設定ファイルを作成・変更してはならない。** コミットがフックに阻まれた場合は、設定を弱めるのではなく停止して報告すること。
-- 着手前の全テスト件数は **93 件**（6 ファイル）。うち `packages/api/src/routes/web.test.ts` が 26 件。
+- 着手前の全テスト件数は **96 件**（7 ファイル）。うち `packages/api/src/routes/web.test.ts` が 26 件。
 
 ### デザイントークン（実装時はこの表を正とする）
 
@@ -74,11 +74,11 @@
 
 `it("declares a dark color scheme", ...)` は**残す**。ライトへの差し替えは Task 2 で行う。
 
-- [ ] **Step 2: テストを実行して 91 件になることを確認する**
+- [ ] **Step 2: テストを実行して 94 件になることを確認する**
 
 Run: `pnpm --filter @timothy/api run test`
 
-Expected: PASS、93 件から 91 件に減る。まだ実装を変えていないので失敗は出ない。
+Expected: PASS、96 件から 94 件に減る。まだ実装を変えていないので失敗は出ない。
 
 - [ ] **Step 3: `web.tsx` から装飾マークアップを削除する**
 
@@ -194,7 +194,7 @@ import {
 
 Run: `pnpm --filter @timothy/api run build && pnpm --filter @timothy/api run test && pnpm lint`
 
-Expected: すべて成功（91 件）。未使用 import が残っていると lint か tsc が落ちるので、その場合は取りこぼしを探すこと。
+Expected: すべて成功（94 件）。未使用 import が残っていると lint か tsc が落ちるので、その場合は取りこぼしを探すこと。
 
 - [ ] **Step 6: 削除の取りこぼしが無いか確認する**
 
@@ -401,7 +401,7 @@ grep -nE "var\(--(bg|panel|panel-edge|line|line-strong|cyan|yellow|text|text-dim
 
 Run: `pnpm --filter @timothy/api run build && pnpm --filter @timothy/api run test && pnpm lint`
 
-Expected: すべて成功（92 件）
+Expected: すべて成功（95 件）
 
 - [ ] **Step 8: コミット**
 
@@ -650,7 +650,7 @@ export const dangerButtonClass = css`
 
 Run: `pnpm --filter @timothy/api run build && pnpm --filter @timothy/api run test && pnpm lint`
 
-Expected: すべて成功（92 件）。マークアップを変えていないので既存テストは影響を受けない。
+Expected: すべて成功（95 件）。マークアップを変えていないので既存テストは影響を受けない。
 
 - [ ] **Step 5: コミット**
 
@@ -900,7 +900,7 @@ Expected: 1 件も出ない。出た場合は Task 2・3 で消し忘れた HUD 
 
 Run: `pnpm --filter @timothy/api run build && pnpm --filter @timothy/api run test && pnpm lint`
 
-Expected: すべて成功（95 件）
+Expected: すべて成功（98 件）
 
 既存テスト `renders a row with the title and share URL` は `expect(html).toContain("http://localhost/s/01ABC")` を検証している。`href` と `data-copy-url` に URL が残るので通る。落ちた場合は実装を疑うこと（テストを緩めてはいけない）。
 
@@ -1059,7 +1059,7 @@ git commit -m "fix(api): adjust web UI styling found in visual check"
 ## 完了条件
 
 - [ ] `pnpm --filter @timothy/api run build` が成功する
-- [ ] `pnpm --filter @timothy/api run test` が成功する（95 件）
+- [ ] `pnpm --filter @timothy/api run test` が成功する（98 件）
 - [ ] `pnpm lint` が 0 errors
 - [ ] `webStyles.ts` に旧トークン（`--bg` `--panel` `--cyan` `--yellow` `--text-dim` 等）と `ui-monospace` / `text-transform` / `clip-path` が残っていない
 - [ ] `web.tsx` に `DataRails` `Header` `cx` `rowNumberClass` `urlClass` が残っていない
