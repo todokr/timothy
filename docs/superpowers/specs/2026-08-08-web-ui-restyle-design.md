@@ -1,56 +1,67 @@
-# Web UI ビジュアルリニューアル設計
+# Web UI ビジュアルリニューアル設計（サイバーパンク調 → 静かな無彩色）
 
 作成日: 2026-08-08
 
+## 前提
+
+この branch には既にサイバーパンク調のリニューアルが実装されている
+（`docs/superpowers/specs/2026-08-08-web-ui-cyberpunk-design.md`、コミット `58df9c8`..`0cc91b5`）。
+本設計はそれを**置き換える**。前設計は履歴として残すが、以後は本設計を正とする。
+
 ## 目的
 
-Timothy の管理画面（`GET /`）の見た目を刷新する。現状はブラウザ既定のスタイルに近い
-プレーンなテーブルとフォームで、`h1` が過大、罫線と影が強い、数字の桁が揃わないなど、
-管理画面として雑然としている。
-
-トーンは「静かな無彩色 + アクセント 1 色」。ライトテーマのみ。
+管理画面（`GET /`）を、ほぼ黒の背景に赤と黄とシアンを載せた HUD 表現から、
+静かな無彩色 + アクセント 1 色のライトテーマに作り替える。毎日使う管理画面として、
+装飾より一覧性を優先する。
 
 ## スコープ
 
-**見た目の変更を主とする。** DOM の ID、クライアント JavaScript、API の挙動は変更しない。
-マークアップに手を入れるのは次の 2 箇所に限る（後述）。
+配色とタイポグラフィの刷新に加え、サイバーパンクの語彙に属する装飾要素と、
+それを支えるマークアップを取り除く。DOM の ID と `data-*` 属性、クライアント JavaScript、
+API の挙動は変更しない。
 
-1. テーブルの横スクロール用ラッパーを追加する
-2. 「共有 URL」列の中身を、URL の文字列から「開く」「URL をコピー」の 2 つのボタンに置き換える
+### 取り除くもの
 
-レイアウトの作り替え（カード一覧化、フォームの多カラム化、ヘッダー追加）や、
-インタラクションの追加（トースト、自前の確認ダイアログ、進捗表示）は行わない。
+| 対象 | 現在の実装 | 理由 |
+|---|---|---|
+| 画面端のバイナリ列 | `web.tsx` の `DataRails` / `RAIL_TEXT`、`railClass` | 意味のない装飾。静かなトーンに合わない |
+| 四隅の L 字ブラケット | `panelClass`、`cx()` での合成 3 箇所 | 同上 |
+| 段差の罫線 | `stepRuleClass`、`Header` 内の `div` | 同上 |
+| 見出し横の件数表示 | `Header` の `fileCount` prop、`statusClass` | `FILES: 03` という表記自体が HUD の語彙 |
+| 行番号列 | `rowNumberClass`、`FileTable` の `index` 利用と `<th></th>` | 列を 1 つ減らして簡素にする |
+| 空状態の英字見出し | `emptyTitleClass`、`<p>No files</p>` | 「まだファイルがありません」だけで足りる |
+| 共有 URL の文字列表示 | `urlClass`、`<a>` の中身 | 後述のとおりボタン 2 つに置き換える |
+
+`Header` は件数表示を失うと `<h1>Timothy</h1>` を出すだけになるため、コンポーネントを畳んで
+`Layout` の呼び出し側に直接書く。`DataRails` も削除する。
+
+### 変更しないもの
+
+- 要素 ID: `#upload-form` `#drop-zone` `#file-input` `#title-input` `#description-input`
+  `#ttl-input` `#submit-button` `#form-error`
+- 属性: `data-delete-id` `data-copy-url` `data-row-error` `data-dragging` `data-expired`
+- `packages/api/src/routes/webScript.ts`
+- ルーティング、`listFiles` の呼び出し、500 時のフォールバック
+
+### スコープ外
+
+- ダークテーマ（`prefers-color-scheme`）。ライトのみとする
+- レイアウトの作り替え（カード一覧化、フォームの多カラム化）
+- インタラクションの追加（トースト、自前の確認ダイアログ、進捗表示）
+- アイコンの導入
+- 共有ページ（`GET /s/:id`）の見た目。利用者の HTML をそのまま返す経路なので対象外
 
 ## 全体方針
 
-デザイントークンを CSS 変数として 1 箇所に定義し、各スタイルはそれを参照する。
-色や余白を後から調整するとき 1 箇所だけを触れば済むようにする。
+現在の `webStyles.ts` は既に `globalStyles` の `:root` にトークンを定義する形になっている。
+この構造は維持し、トークンの中身と各クラスの参照先を差し替える。
 
-変数は `bodyClass` のブロック内で宣言する。`hono/css` はクラス名を生成する仕組みなので
-`:root` を直接扱えないが、`body` の子孫すべてが CSS 変数を継承するため、これで足りる。
-
-トークンを持たずに各 `css` ブロックへ直接値を書く案も検討したが、同じグレーが 7 箇所に
-散らばり、調整のたびに探し回ることになるため採らない。Tailwind 等の導入は
-「バンドラを持ち込まない」という既存方針に反するため採らない。
-
-## ファイル構成
-
-```
-packages/api/src/routes/
-├── web.tsx        # マークアップに専念（スタイル定数を webStyles.ts へ移す）
-└── webStyles.ts   # 新規: hono/css のクラス定数とデザイントークン
-```
-
-`web.tsx` は現在 280 行あり、スタイルを充実させると 300 行を超える。当初の設計で
-「300 行を超えたら分割する」と決めていたため、ここで切り出す。
-
-`webStyles.ts` は `hono/css` の `css` テンプレートで生成したクラス名を名前付きエクスポート
-する。エクスポート名は現行のまま（`bodyClass`, `containerClass`, `formClass`,
-`dropZoneClass`, `errorBoxClass`, `tableClass`, `badgeClass`, `emptyClass`,
-`errorPageClass`）とし、ボタン用に 3 つ（`primaryButtonClass`, `ghostButtonClass`,
-`dangerButtonClass`）と、テーブルのラッパー用に `tableWrapClass` を追加する。
+`hono/css` の `cx()` は `panelClass` の合成にのみ使われている。合成が無くなるので
+`web.tsx` から `cx` の import を外す。
 
 ## デザイントークン
+
+`globalStyles` の `:root` を次に差し替える。`color-scheme` は `dark` から `light` にする。
 
 | 変数 | 値 | 用途 |
 |---|---|---|
@@ -74,76 +85,94 @@ packages/api/src/routes/
 | `--shadow-sm` | `0 1px 2px rgba(16, 24, 40, 0.05)` | カード |
 | `--space-1` 〜 `--space-6` | `4px` `8px` `12px` `16px` `24px` `32px` | 余白 |
 
+現行の `--bg` `--panel` `--panel-edge` `--line` `--line-strong` `--cyan` `--yellow`
+`--text` `--text-dim` `--gap` `--gap-lg` は廃止する。`--font-mono` も廃止する
+（等幅を使う箇所が無くなるため）。`--font-ui` はフォントスタックとして残すが、
+名前を `--font-sans` に改める。
+
 ## タイポグラフィ
 
 フォントスタックは現行の `system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP",
 sans-serif` を据え置く。外部フォントは読み込まない。CSP の制約があり、オフラインでも
 崩れないことを優先する。
 
-日時列（有効期限・作成日時）に `font-variant-numeric: tabular-nums` を当てて桁を揃える。
-CLI 側でも列揃えを修正した経緯があり（コミット `85da98d`）、そこに合わせる。
+現在ラベル・テーブル見出し・ボタン・URL に使われている等幅フォントと、
+`letter-spacing: 0.16em` 前後の字間拡張、`text-transform: uppercase` はすべて外す。
+日本語が混ざる画面で字間を広げると読みにくいうえ、HUD の語彙そのものであるため。
 
-等幅フォントは使わない。URL の文字列を画面に出さなくなるため、使う場面がない。
+日時列（有効期限・作成日時）には `font-variant-numeric: tabular-nums` を当てて桁を揃える。
+CLI 側でも列揃えを修正した経緯があり（コミット `85da98d`）、そこに合わせる。
 
 ## 各パーツの指定
 
 ### ページ
 
-背景 `--gray-50`、本文色 `--gray-900`、`line-height: 1.6`。
+`html, body` の背景を `--gray-50`、文字色を `--gray-900`、`line-height: 1.6`。
+リンクの既定色は `--accent`、`text-decoration` は現行どおり hover でのみ下線。
 
-`h1` はブラウザ既定のままだと過大なので、`font-size: 1.5rem` / `font-weight: 600` /
-`letter-spacing: -0.01em` / `margin: 0 0 var(--space-5)` にする。
+`h1` は `font-size: 1.5rem` / `font-weight: 600` / `letter-spacing: -0.01em` /
+`margin: 0 0 var(--space-5)`。現行の `0.32em` の字間と大文字化は外す。
+
+`@media (prefers-reduced-motion: reduce)` の指定は現行のまま残す。
 
 ### カード（アップロードフォーム・テーブル）
 
 背景 `--gray-0`、`border: 1px solid var(--gray-200)`、`border-radius: var(--radius-md)`、
-`box-shadow: var(--shadow-sm)`。影は現状より弱くし、枠線で面を分ける。
+`box-shadow: var(--shadow-sm)`。
 
 ### ドロップゾーン
 
 `border: 2px dashed var(--gray-300)`、文字色 `--gray-500`。
 `[data-dragging="true"]` のとき枠線と文字が `--accent`、背景が `--accent-soft`。
-遷移は `transition: border-color .15s, background-color .15s, color .15s`。
 
 ### 入力
 
 `height: 2.25rem`、`padding: 0 var(--space-3)`、`border: 1px solid var(--gray-200)`、
-`border-radius: var(--radius-sm)`、`font: inherit`。
-プレースホルダは `--gray-400`。
+`border-radius: var(--radius-sm)`、`font: inherit`。現行は下線だけの入力欄だが、
+枠で囲む形に改める。
 
-フォーカス時は `outline: none` にしたうえで
-`border-color: var(--accent)` と `box-shadow: 0 0 0 3px var(--accent-soft)` のリングを出す。
+フォーカス時は `outline: none` にしたうえで `border-color: var(--accent)` と
+`box-shadow: 0 0 0 3px var(--accent-soft)` のリングを出す。
 
 ラベルは `--gray-700` / `font-size: 0.8125rem` / `font-weight: 500`。
 
-`#ttl-input` だけ `max-width: 8rem` に絞る。他のテキスト入力は `max-width: 24rem`。
+`input[type="number"]` は `max-width: 8rem`、`input[type="text"]` は `max-width: 24rem`。
+
+`input[type="file"]::file-selector-button` は ghost ボタンと同じ見た目に揃える。
 
 ### ボタン
 
-3 種に整理する。共通で `height: 2.25rem`（テーブル内は `1.75rem`）、
-`border-radius: var(--radius-sm)`、`font: inherit`、`cursor: pointer`、
-`transition: background-color .15s, border-color .15s`。
+現行の 3 つのエクスポート名を維持する。`clip-path` による角落としは外す。
 
-| 種類 | 使う場所 | 指定 |
+| クラス | 使う場所 | 指定 |
 |---|---|---|
-| primary | アップロード | 背景 `--accent`、文字 `#fff`、枠線なし。hover で `--accent-hover`。`:disabled` は `opacity: .5` / `cursor: not-allowed` |
-| ghost | コピー | 背景透明、`1px solid var(--gray-200)`、文字 `--gray-700`。hover で背景 `--gray-100` |
-| danger | 削除 | 背景透明、枠線なし、文字 `--danger`。hover で背景 `--danger-soft` |
+| `submitButtonClass` | アップロード | 背景 `--accent`、文字 `#fff`、枠線なし、`height: 2.25rem`。hover で `--accent-hover`。`:disabled` は `opacity: .5` / `cursor: not-allowed` |
+| `ghostButtonClass` | 開く・URL をコピー | 背景透明、`1px solid var(--gray-200)`、文字 `--gray-700`、`height: 1.75rem`。hover で背景 `--gray-100` |
+| `dangerButtonClass` | 削除 | 背景透明、枠線なし、文字 `--danger`、`height: 1.75rem`。hover で背景 `--danger-soft` |
 
 いずれも `:focus-visible` で `box-shadow: 0 0 0 3px var(--accent-soft)`。
 
+`ghostButtonClass` は現行 `margin-left: 0.5rem` を持つが、共有列で 2 つ並べるため
+外側の余白は親の `gap` で作る。この宣言は削除する。
+
 ### テーブル
 
-見出し行（`th`）は背景色を外し、`font-size: 0.75rem` / `font-weight: 500` /
-`color: var(--gray-500)` にして、下罫線だけで区切る。
+列は タイトル / 説明 / 共有 / 有効期限 / 作成日時 / （削除）の 6 つ。行番号列は削除する。
 
-行の罫線は `--gray-100` の 1px。最終行は罫線なし。
-`tbody tr:hover` で背景 `--gray-25`。
+見出し行（`th`）は背景色を外し、`font-size: 0.75rem` / `font-weight: 500` /
+`color: var(--gray-500)` にして下罫線だけで区切る。等幅・大文字化・字間拡張は外す。
+
+行の罫線は `--gray-100` の 1px。最終行は罫線なし。`tbody tr:hover` で背景 `--gray-25`。
+現行の hover 時の左端赤ライン（`box-shadow: inset 2px 0 0`）は外す。
+
+日時の 2 列に `font-variant-numeric: tabular-nums`。
+
+説明の列だけ `white-space: normal` を許し、それ以外は `nowrap`。
 
 ### 共有列
 
 列見出しは「共有 URL」から **「共有」** に改める。URL 文字列を出さなくなるため。
-位置は現行どおり 3 列目に置き、削除ボタンは右端の列に残す。
+位置は現行どおり（行番号列を削ったので 3 列目）。削除ボタンは右端の列に残す。
 
 セルの中身は ghost ボタン 2 つを `var(--space-2)` の間隔で横に並べる。
 
@@ -152,24 +181,30 @@ CLI 側でも列揃えを修正した経緯があり（コミット `85da98d`）
 | 開く | `<a href={file.url} target="_blank" rel="noreferrer">開く</a>` | 共有ページを別タブで開く |
 | URL をコピー | `<button type="button" data-copy-url={file.url}>URL をコピー</button>` | 既存のクライアント JS がそのまま拾う |
 
-`a` は ghost ボタンと同じ見た目に揃えるため、`display: inline-flex` /
-`align-items: center` / `text-decoration: none` を足す。
+`a` は ghost ボタンと同じ見た目に揃えるため `display: inline-flex` /
+`align-items: center` / `text-decoration: none` を足す。hover でも下線を出さない。
 
-URL 文字列を画面に出さなくなっても、`href` と `data-copy-url` の両属性に残るため、
+URL 文字列を画面に出さなくなっても `href` と `data-copy-url` に残るため、
 コピー機能と既存テストの URL 検証はそのまま成立する。
 
 ### 期限切れの行
 
-現状は行全体を `--gray-400` 相当に落としているが、タイトルは読める必要がある。
-日時のセルだけ `--gray-400` にし、タイトルと説明は通常色のままにする。
-バッジは下記のとおり danger 系の配色で、淡色化の対象に含めない。
+現行は行全体を `--text-dim` に落とし、リンク色も別途下げている。
+本設計では日時の 2 セルだけ `--gray-400` にし、タイトルと説明は通常色のまま残す。
+リンクは「開く」ボタンになるため個別の色調整は不要。
 
 バッジは `--danger-soft` 背景 / `--danger` 文字 / `border-radius: 999px` /
-`font-size: 0.6875rem` / `padding: 2px 8px`。
+`font-size: 0.6875rem` / `padding: 2px var(--space-2)`。
 
 ### 空状態
 
-`--gray-500`、`padding: var(--space-6) var(--space-4)`、中央寄せ。
+`--gray-500`、`padding: var(--space-6) var(--space-4)`、中央寄せ、カードの枠内。
+英字見出しは出さず「まだファイルがありません」の 1 行のみ。
+
+### 行内エラー（`[data-row-error]`）
+
+`rowErrorClass` は現行の `display: block` と等幅指定を外し、
+`margin-left: var(--space-2)` / `font-size: 0.8125rem` / `color: var(--danger)` にする。
 
 ### エラー表示（`#form-error`）
 
@@ -179,48 +214,31 @@ URL 文字列を画面に出さなくなっても、`href` と `data-copy-url` �
 
 ### 500 エラーページ
 
-`--danger` の見出しと `--gray-500` の説明に整える。カード内に収める。
+`--danger` の文字色を保ちつつ、カードの枠内に収める。
 
-## マークアップの変更
-
-### 1. テーブルの横スクロール用ラッパー
+## マークアップの横スクロール対応
 
 テーブルを `overflow-x: auto` の `div`（`tableWrapClass`）で包む。列が 6 つあるため、
 狭い画面ではページ全体が横スクロールしてしまい、CSS だけでは解決できない。
-カードの枠線と角丸はこのラッパーが持ち、`table` 自体からは外す。
-
-### 2. 共有列の中身
-
-前述のとおり、URL の文字列表示をやめて「開く」「URL をコピー」の 2 ボタンにする。
-列見出しも「共有」に改める。
-
-### 既存テストへの影響
-
-`web.test.ts` は要素の ID、`data-*` 属性、日本語のテキストを検証している。
-URL を検証している箇所（`expect(html).toContain("http://localhost/s/01ABC")`）は
-`href` と `data-copy-url` が残るため引き続き成立する。クラス名に依存したテストはない。
-したがって既存テストの書き換えは不要な見込みだが、実装時に実際に確認する。
-
-クライアント JS の `[data-copy-url]` セレクタと、押下時にラベルを「コピーしました」に
-差し替えて元に戻す処理は、ボタンのテキストが変わっても `button.textContent` を
-保存・復元する実装なのでそのまま動く。
+カードの枠線・角丸・影はこのラッパーが持ち、`table` 自体からは外す。
 
 ## テスト
 
-既存の 23 テストはクラス名に依存していないため、そのまま通ることを確認する。
+既存の `packages/api/src/routes/web.test.ts` には、削除する要素を検証しているテストが
+3 件ある。実装に合わせて次のとおり扱う。
 
-加えて 1 件だけ追加する。スタイルの切り出しが壊れていないことを検出するため、
-`GET /` のレスポンスに `<style id="hono-css">` が含まれ、その中にアクセント色
-`#2563eb` が現れることを検証する。`webStyles.ts` の import が抜けたり、
-`<Style />` が消えたりすると失敗する。
+| テスト | 扱い |
+|---|---|
+| `declares a dark color scheme` | ライトテーマに変わるため、`color-scheme: light` を検証する内容に書き換える |
+| `hides the decorative rails from assistive technology` | 装飾を削除するので、このテストも削除する |
+| `numbers the rows` | 行番号列を削除するので、このテストも削除する |
+
+加えて次の 4 件を追加する。
+
+1. スタイルシートが出力され、アクセント色 `#2563eb` を含むこと
+2. 共有列に「開く」「URL をコピー」が出て、URL 文字列が本文として出ないこと
+3. 共有列の見出しが「共有」であること
+4. テーブルが `overflow-x: auto` のラッパーに包まれていること
 
 見た目そのものの検証は自動テストでは行わない。Firebase エミュレータで起動した実画面の
 スクリーンショットで確認する。
-
-## スコープ外
-
-- ダークテーマ（`prefers-color-scheme`）
-- レイアウトの作り替え（カード一覧化、フォームの多カラム化、ヘッダーやナビゲーションの追加）
-- インタラクションの追加（トースト、自前の確認ダイアログ、アップロード進捗）
-- アイコンの導入
-- 共有ページ（`GET /s/:id`）の見た目 — ユーザーがアップロードした HTML をそのまま返す経路なので対象外
