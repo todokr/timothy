@@ -184,6 +184,34 @@ describe("GET /", () => {
     expect(html).toContain("#2563eb");
   });
 
+  it("offers 開く and URL をコピー instead of printing the URL", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry()]);
+    const html = await (await app.request("/")).text();
+
+    expect(html).toContain(">開く<");
+    expect(html).toContain(">URL をコピー<");
+    // URL は href と data-copy-url にのみ残り、本文としては出ない。
+    expect(html).toContain('href="http://localhost/s/01ABC"');
+    expect(html).toContain('data-copy-url="http://localhost/s/01ABC"');
+    expect(html).not.toContain(">http://localhost/s/01ABC<");
+  });
+
+  it("labels the share column 共有", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry()]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("<th>共有</th>");
+    expect(html).not.toContain("<th>共有 URL</th>");
+  });
+
+  it("wraps the table so narrow screens scroll the table, not the page", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry()]);
+    const html = await (await app.request("/")).text();
+    // ラッパーの div が table を直接包んでいること。
+    expect(html).toMatch(/<div class="css-[^"]*"><table/);
+    // 横スクロールの指定がスタイルシートに出ていること。
+    expect(html).toContain("overflow-x:auto");
+  });
+
 });
 
 describe("CLIENT_SCRIPT", () => {

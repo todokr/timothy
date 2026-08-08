@@ -80,68 +80,81 @@ export const headerClass = css`
   color: var(--gray-900);
 `;
 
+export const tableWrapClass = css`
+  overflow-x: auto;
+  background: var(--gray-0);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+`;
+
 export const tableClass = css`
   width: 100%;
   border-collapse: collapse;
-  background: var(--panel);
-  border: 1px solid var(--panel-edge);
 
   th,
   td {
-    padding: 0.7rem 0.75rem;
+    padding: var(--space-3) var(--space-4);
     text-align: left;
-    border-bottom: 1px solid var(--line);
-    font-size: 0.8125rem;
-    vertical-align: top;
+    vertical-align: middle;
+    white-space: nowrap;
   }
 
   th {
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    font-weight: 400;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--cyan);
-    background: #121419;
-    border-bottom-color: var(--line-strong);
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--gray-500);
+    border-bottom: 1px solid var(--gray-200);
   }
 
-  tbody tr {
-    position: relative;
-    transition: background-color 120ms linear;
+  td {
+    font-size: 0.875rem;
+    border-bottom: 1px solid var(--gray-100);
   }
 
-  tbody tr:hover {
-    background: #14090c;
-  }
-
-  tbody tr:hover td:first-child {
-    box-shadow: inset 2px 0 0 var(--accent);
-  }
-
-  tr:last-child td {
+  tbody tr:last-child td {
     border-bottom: none;
   }
 
-  tr[data-expired="true"] {
-    color: var(--text-dim);
+  tbody tr:hover {
+    background: var(--gray-25);
   }
 
-  /* 減光しつつ本文サイズで AA (4.91:1) を満たすくすんだシアン。 */
-  tr[data-expired="true"] a {
-    color: #5c898c;
+  /* 説明は長くなりうるので、この列だけ折り返しを許す。 */
+  td:nth-child(2) {
+    white-space: normal;
+    min-width: 12rem;
+    color: var(--gray-700);
   }
+
+  /* 有効期限と作成日時。桁を揃える。 */
+  td:nth-child(4),
+  td:nth-child(5) {
+    font-variant-numeric: tabular-nums;
+    color: var(--gray-700);
+  }
+
+  /* 期限切れは日時だけ淡くする。タイトルと説明は読めるまま残す。 */
+  tr[data-expired="true"] td:nth-child(4),
+  tr[data-expired="true"] td:nth-child(5) {
+    color: var(--gray-400);
+  }
+`;
+
+export const shareCellClass = css`
+  display: flex;
+  gap: var(--space-2);
 `;
 
 export const badgeClass = css`
   display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.05rem 0.4rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.12em;
-  color: var(--accent);
-  border: 1px solid var(--line-strong);
+  margin-left: var(--space-2);
+  padding: 2px var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-radius: 999px;
 `;
 
 export const formClass = css`
@@ -370,9 +383,7 @@ export const dangerButtonClass = css`
 `;
 
 export const rowErrorClass = css`
-  display: block;
-  margin-top: 0.3rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  color: var(--accent);
+  margin-left: var(--space-2);
+  font-size: 0.8125rem;
+  color: var(--danger);
 `;

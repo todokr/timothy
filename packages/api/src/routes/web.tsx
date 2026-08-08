@@ -8,6 +8,8 @@ import {
   containerClass,
   headerClass,
   tableClass,
+  tableWrapClass,
+  shareCellClass,
   badgeClass,
   formClass,
   dropZoneClass,
@@ -73,48 +75,57 @@ function FileTable(props: { files: FileEntry[]; nowMs: number }) {
   }
 
   return (
-    <table class={tableClass}>
-      <thead>
-        <tr>
-          <th>タイトル</th>
-          <th>説明</th>
-          <th>共有 URL</th>
-          <th>有効期限</th>
-          <th>作成日時</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {props.files.map((file) => {
-          const expired = isExpired(file.expiresAt, props.nowMs);
-          return (
-            <tr key={file.id} data-expired={String(expired)}>
-              <td>{file.title}</td>
-              <td>{file.description}</td>
-              <td>
-                <a href={file.url} target="_blank" rel="noreferrer">
-                  {file.url}
-                </a>
-                <button type="button" class={ghostButtonClass} data-copy-url={file.url}>
-                  コピー
-                </button>
-              </td>
-              <td>
-                {formatJst(file.expiresAt)}
-                {expired ? <span class={badgeClass}>期限切れ</span> : null}
-              </td>
-              <td>{formatJst(file.createdAt)}</td>
-              <td>
-                <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
-                  削除
-                </button>
-                <span class={rowErrorClass} data-row-error></span>
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div class={tableWrapClass}>
+      <table class={tableClass}>
+        <thead>
+          <tr>
+            <th>タイトル</th>
+            <th>説明</th>
+            <th>共有</th>
+            <th>有効期限</th>
+            <th>作成日時</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {props.files.map((file) => {
+            const expired = isExpired(file.expiresAt, props.nowMs);
+            return (
+              <tr key={file.id} data-expired={String(expired)}>
+                <td>{file.title}</td>
+                <td>{file.description}</td>
+                <td>
+                  <div class={shareCellClass}>
+                    <a
+                      class={ghostButtonClass}
+                      href={file.url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      開く
+                    </a>
+                    <button type="button" class={ghostButtonClass} data-copy-url={file.url}>
+                      URL をコピー
+                    </button>
+                  </div>
+                </td>
+                <td>
+                  {formatJst(file.expiresAt)}
+                  {expired ? <span class={badgeClass}>期限切れ</span> : null}
+                </td>
+                <td>{formatJst(file.createdAt)}</td>
+                <td>
+                  <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
+                    削除
+                  </button>
+                  <span class={rowErrorClass} data-row-error></span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
