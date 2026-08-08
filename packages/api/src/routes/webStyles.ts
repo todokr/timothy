@@ -154,13 +154,10 @@ export const formClass = css`
 
   label {
     display: block;
-    margin-bottom: 1rem;
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-    font-weight: 400;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--cyan);
+    margin-bottom: var(--space-4);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--gray-700);
   }
 
   input[type="text"],
@@ -168,99 +165,114 @@ export const formClass = css`
     display: block;
     width: 100%;
     max-width: 24rem;
-    margin-top: 0.35rem;
-    padding: 0.45rem 0.1rem;
-    font-family: var(--font-mono);
-    font-size: 0.875rem;
-    letter-spacing: 0.02em;
-    color: var(--text);
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--panel-edge);
-    border-radius: 0;
-    transition: border-color 120ms linear;
+    height: 2.25rem;
+    margin-top: var(--space-1);
+    padding: 0 var(--space-3);
+    font: inherit;
+    font-weight: 400;
+    color: var(--gray-900);
+    background: var(--gray-0);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    transition: border-color 120ms linear, box-shadow 120ms linear;
+  }
+
+  input[type="number"] {
+    max-width: 8rem;
+  }
+
+  input[type="text"]::placeholder {
+    color: var(--gray-400);
   }
 
   input[type="text"]:focus,
   input[type="number"]:focus {
     outline: none;
-    border-bottom-color: var(--cyan);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
   input[type="file"] {
-    margin-top: 0.35rem;
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--text-dim);
+    display: block;
+    margin-top: var(--space-1);
+    font: inherit;
+    font-size: 0.875rem;
+    color: var(--gray-700);
   }
 
   input[type="file"]::file-selector-button {
-    margin-right: 0.6rem;
-    padding: 0.3rem 0.7rem;
+    margin-right: var(--space-3);
+    padding: 0 var(--space-3);
+    height: 1.75rem;
     font: inherit;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--cyan);
+    font-size: 0.8125rem;
+    color: var(--gray-700);
     background: transparent;
-    border: 1px solid var(--line-strong);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-sm);
     cursor: pointer;
   }
 `;
 
 export const dropZoneClass = css`
-  margin-bottom: 1.5rem;
-  padding: 2rem 1rem;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.14em;
+  margin-bottom: var(--space-4);
+  padding: var(--space-6) var(--space-4);
+  font-size: 0.875rem;
   text-align: center;
-  color: var(--text-dim);
-  border: 1px dashed var(--panel-edge);
+  color: var(--gray-500);
+  border: 2px dashed var(--gray-300);
+  border-radius: var(--radius-md);
   transition:
     color 120ms linear,
     border-color 120ms linear,
     background-color 120ms linear;
 
   &[data-dragging="true"] {
-    color: var(--yellow);
-    background: #17170a;
-    border-color: var(--yellow);
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--accent);
   }
 `;
 
 export const submitButtonClass = css`
-  padding: 0.55rem 1.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #08090b;
-  background: var(--yellow);
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.25rem;
+  padding: 0 var(--space-4);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #fff;
+  background: var(--accent);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  /* 右下の角を斜めに落として HUD のボタンらしくする */
-  clip-path: polygon(0 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%);
-  transition: opacity 120ms linear;
+  transition: background-color 120ms linear;
 
   &:hover:not(:disabled) {
-    opacity: 0.85;
+    background: var(--accent-hover);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
   &:disabled {
-    color: var(--text-dim);
-    background: #2a2c31;
-    cursor: default;
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 `;
 
 export const errorBoxClass = css`
-  margin: 0 0 var(--gap);
-  padding: 0.6rem 0.75rem;
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
   font-size: 0.875rem;
-  color: var(--accent);
-  background: #1a0d10;
-  border: 1px solid var(--line-strong);
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-left: 3px solid var(--danger);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
 
   &[hidden] {
     display: none;
@@ -292,51 +304,68 @@ export const errorPageClass = css`
 `;
 
 export const ghostButtonClass = css`
-  margin-left: 0.5rem;
-  padding: 0.15rem 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.12em;
-  color: var(--cyan);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.75rem;
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--gray-700);
   background: transparent;
-  border: 1px solid var(--panel-edge);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition:
-    color 120ms linear,
-    border-color 120ms linear;
+  transition: background-color 120ms linear, border-color 120ms linear;
 
   &:hover:not(:disabled) {
-    border-color: var(--cyan);
+    background: var(--gray-100);
+    text-decoration: none;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
   &:disabled {
-    color: var(--text-dim);
-    cursor: default;
+    color: var(--gray-400);
+    cursor: not-allowed;
   }
 `;
 
 export const dangerButtonClass = css`
-  padding: 0.15rem 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.625rem;
-  letter-spacing: 0.12em;
-  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.75rem;
+  padding: 0 var(--space-3);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--danger);
   background: transparent;
-  border: 1px solid var(--line-strong);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition:
-    color 120ms linear,
-    background-color 120ms linear;
+  transition: background-color 120ms linear;
 
   &:hover:not(:disabled) {
-    color: #08090b;
-    background: var(--accent);
+    background: var(--danger-soft);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
   &:disabled {
-    color: var(--text-dim);
-    border-color: var(--panel-edge);
-    cursor: default;
+    color: var(--gray-400);
+    cursor: not-allowed;
   }
 `;
 
