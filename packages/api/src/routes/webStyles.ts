@@ -138,28 +138,11 @@ export const tableClass = css`
     font-variant-numeric: tabular-nums;
     color: var(--gray-700);
   }
-
-  /* 期限切れは日時だけ淡くする。タイトルと説明は読めるまま残す。 */
-  tr[data-expired="true"] td:nth-child(4),
-  tr[data-expired="true"] td:nth-child(5) {
-    color: var(--gray-500);
-  }
 `;
 
 export const shareCellClass = css`
   display: flex;
   gap: var(--space-2);
-`;
-
-export const badgeClass = css`
-  display: inline-block;
-  margin-left: var(--space-2);
-  padding: 2px var(--space-2);
-  font-size: 0.6875rem;
-  font-weight: 500;
-  color: var(--danger);
-  background: var(--danger-soft);
-  border-radius: 999px;
 `;
 
 export const formClass = css`
