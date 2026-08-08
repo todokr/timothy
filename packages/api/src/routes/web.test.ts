@@ -81,18 +81,36 @@ describe("GET /", () => {
     expect(html).toContain("2026-08-07 12:04");
   });
 
-  it("marks expired files with a badge", async () => {
+  it("hides expired files from the list", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "01OLD", title: "Expired Report", expiresAt: "2000-01-01T00:00:00.000Z" }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).not.toContain("Expired Report");
+    expect(html).not.toContain('data-delete-id="01OLD"');
+  });
+
+  it("keeps live files and drops only the expired ones", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "01LIVE", title: "Live Report", expiresAt: "2099-01-01T00:00:00.000Z" }),
+      entry({ id: "01OLD", title: "Expired Report", expiresAt: "2000-01-01T00:00:00.000Z" }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("Live Report");
+    expect(html).toContain('data-delete-id="01LIVE"');
+    expect(html).not.toContain("Expired Report");
+    expect(html).not.toContain('data-delete-id="01OLD"');
+  });
+
+  // 全件が期限切れのときに「まだファイルがありません」を出すと、
+  // 昨日アップロードした利用者がデータを失ったと誤解する。
+  it("distinguishes an empty collection from an all-expired one", async () => {
     vi.mocked(listFiles).mockResolvedValue([
       entry({ id: "01OLD", expiresAt: "2000-01-01T00:00:00.000Z" }),
     ]);
     const html = await (await app.request("/")).text();
-    expect(html).toContain("期限切れ");
-  });
-
-  it("does not mark live files as expired", async () => {
-    vi.mocked(listFiles).mockResolvedValue([entry()]);
-    const html = await (await app.request("/")).text();
-    expect(html).not.toContain("期限切れ");
+    expect(html).toContain("有効期限内のファイルがありません");
+    expect(html).not.toContain("まだファイルがありません");
   });
 
   it("renders a delete button carrying the file id", async () => {

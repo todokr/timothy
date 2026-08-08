@@ -10,7 +10,6 @@ import {
   tableClass,
   tableWrapClass,
   shareCellClass,
-  badgeClass,
   formClass,
   dropZoneClass,
   submitButtonClass,
@@ -65,11 +64,11 @@ function Layout(props: { children: unknown; withScript?: boolean }) {
   );
 }
 
-function FileTable(props: { files: FileEntry[]; nowMs: number }) {
+function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
   if (props.files.length === 0) {
     return (
       <div class={emptyClass}>
-        <p>まだファイルがありません</p>
+        <p>{props.emptyMessage}</p>
       </div>
     );
   }
@@ -88,41 +87,35 @@ function FileTable(props: { files: FileEntry[]; nowMs: number }) {
           </tr>
         </thead>
         <tbody>
-          {props.files.map((file) => {
-            const expired = isExpired(file.expiresAt, props.nowMs);
-            return (
-              <tr key={file.id} data-expired={String(expired)}>
-                <td>{file.title}</td>
-                <td>{file.description}</td>
-                <td>
-                  <div class={shareCellClass}>
-                    <a
-                      class={ghostButtonClass}
-                      href={file.url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      開く
-                    </a>
-                    <button type="button" class={ghostButtonClass} data-copy-url={file.url}>
-                      URL をコピー
-                    </button>
-                  </div>
-                </td>
-                <td>
-                  {formatJst(file.expiresAt)}
-                  {expired ? <span class={badgeClass}>期限切れ</span> : null}
-                </td>
-                <td>{formatJst(file.createdAt)}</td>
-                <td>
-                  <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
-                    削除
+          {props.files.map((file) => (
+            <tr key={file.id}>
+              <td>{file.title}</td>
+              <td>{file.description}</td>
+              <td>
+                <div class={shareCellClass}>
+                  <a
+                    class={ghostButtonClass}
+                    href={file.url}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    開く
+                  </a>
+                  <button type="button" class={ghostButtonClass} data-copy-url={file.url}>
+                    URL をコピー
                   </button>
-                  <span class={rowErrorClass} data-row-error></span>
-                </td>
-              </tr>
-            );
-          })}
+                </div>
+              </td>
+              <td>{formatJst(file.expiresAt)}</td>
+              <td>{formatJst(file.createdAt)}</td>
+              <td>
+                <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
+                  削除
+                </button>
+                <span class={rowErrorClass} data-row-error></span>
+              </td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -175,11 +168,19 @@ app.get("/", async (c) => {
     );
   }
 
+  const nowMs = Date.now();
+  const live = files.filter((file) => !isExpired(file.expiresAt, nowMs));
+
+  // 取得は出来たが全件期限切れ、という状態を「まだファイルがありません」と
+  // 表示するとデータが消えたように読めるため、文言を分ける。
+  const emptyMessage =
+    files.length === 0 ? "まだファイルがありません" : "有効期限内のファイルがありません";
+
   return c.html(
     <Layout withScript>
       <h1 class={headerClass}>Tim</h1>
       <UploadForm />
-      <FileTable files={files} nowMs={Date.now()} />
+      <FileTable files={live} emptyMessage={emptyMessage} />
     </Layout>
   );
 });
