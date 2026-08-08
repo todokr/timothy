@@ -137,7 +137,7 @@ export const tableClass = css`
   /* 期限切れは日時だけ淡くする。タイトルと説明は読めるまま残す。 */
   tr[data-expired="true"] td:nth-child(4),
   tr[data-expired="true"] td:nth-child(5) {
-    color: var(--gray-400);
+    color: var(--gray-500);
   }
 `;
 
