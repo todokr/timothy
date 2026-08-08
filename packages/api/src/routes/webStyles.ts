@@ -67,8 +67,13 @@ export const globalStyles = css`
   }
 `;
 
+/*
+ * 60rem のままだと 6 列のテーブル (実測 1221px) が収まらず、1280px の画面でも
+ * 削除ボタンに横スクロールなしで届かない。一覧性を優先して 78rem まで広げる。
+ * フォームの入力欄は個別に max-width を持つので、広げても間延びしない。
+ */
 export const containerClass = css`
-  max-width: 60rem;
+  max-width: 78rem;
   margin: 0 auto;
 `;
 
