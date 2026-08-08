@@ -184,6 +184,22 @@ describe("GET /", () => {
     expect(html).toContain("#2563eb");
   });
 
+  it("calls the page Tim, not Timothy", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("<title>Tim</title>");
+    expect(html).toContain(">Tim</h1>");
+    expect(html).not.toContain("Timothy");
+  });
+
+  it("calls the error page Tim too", async () => {
+    vi.mocked(listFiles).mockRejectedValue(new Error("Firestore is down"));
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("<title>Tim</title>");
+    expect(html).toContain(">Tim</h1>");
+    expect(html).not.toContain("Timothy");
+  });
+
   it("offers 開く and URL をコピー instead of printing the URL", async () => {
     vi.mocked(listFiles).mockResolvedValue([entry()]);
     const html = await (await app.request("/")).text();

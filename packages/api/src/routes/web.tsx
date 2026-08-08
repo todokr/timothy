@@ -51,7 +51,7 @@ function Layout(props: { children: unknown; withScript?: boolean }) {
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Timothy</title>
+          <title>Tim</title>
           <Style>{globalStyles}</Style>
         </head>
         <body>
@@ -168,7 +168,7 @@ app.get("/", async (c) => {
   } catch {
     return c.html(
       <Layout>
-        <h1 class={headerClass}>Timothy</h1>
+        <h1 class={headerClass}>Tim</h1>
         <p class={errorPageClass}>一覧を取得できませんでした。時間をおいて再読み込みしてください。</p>
       </Layout>,
       500
@@ -177,7 +177,7 @@ app.get("/", async (c) => {
 
   return c.html(
     <Layout withScript>
-      <h1 class={headerClass}>Timothy</h1>
+      <h1 class={headerClass}>Tim</h1>
       <UploadForm />
       <FileTable files={files} nowMs={Date.now()} />
     </Layout>
