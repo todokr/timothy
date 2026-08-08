@@ -256,7 +256,7 @@ export const submitButtonClass = css`
 
   &:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px var(--accent-soft);
+    box-shadow: 0 0 0 2px var(--gray-0), 0 0 0 4px var(--accent);
   }
 
   &:disabled {
@@ -328,7 +328,7 @@ export const ghostButtonClass = css`
 
   &:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px var(--accent-soft);
+    box-shadow: 0 0 0 2px var(--gray-0), 0 0 0 4px var(--accent);
   }
 
   &:disabled {
@@ -360,7 +360,7 @@ export const dangerButtonClass = css`
 
   &:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px var(--accent-soft);
+    box-shadow: 0 0 0 2px var(--gray-0), 0 0 0 4px var(--accent);
   }
 
   &:disabled {
