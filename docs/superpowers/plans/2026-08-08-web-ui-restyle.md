@@ -776,7 +776,7 @@ export const tableClass = css`
   /* 期限切れは日時だけ淡くする。タイトルと説明は読めるまま残す。 */
   tr[data-expired="true"] td:nth-child(4),
   tr[data-expired="true"] td:nth-child(5) {
-    color: var(--gray-400);
+    color: var(--gray-500);
   }
 `;
 
@@ -1009,6 +1009,18 @@ agent-browser screenshot /private/tmp/claude-502/-Users-shunsuke-tadokoro-work-t
 ```
 
 削除ボタンの hover で淡い赤の背景が出ること、入力欄のフォーカスで青いリングが出ることを画像で確認する。
+
+続けて、テーブル内のボタンのフォーカスリングが `tableWrapClass` の `overflow-x: auto` に
+切り取られていないかを確認する。`overflow-x` に `visible` 以外を指定すると もう一方の軸も
+`auto` に計算されるため、ボタンの外側 4px まで伸びるリングが端の行で欠ける可能性がある。
+
+```bash
+agent-browser focus "tbody tr:last-child [data-delete-id]"
+agent-browser screenshot /private/tmp/claude-502/-Users-shunsuke-tadokoro-work-timothy-cli/464dd1c6-dc6f-4d6a-85e1-4f0636e7cc9b/scratchpad/focus-last-row.png
+```
+
+最終行の削除ボタンのリングが上下左右とも欠けずに出ていることを画像で確認する。
+欠けている場合は `tableWrapClass` に `padding: 4px` を足し、その分 `td` の余白を詰める。
 
 - [ ] **Step 6: 狭い画面でページが横スクロールしないことを確認する**
 
