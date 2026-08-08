@@ -2,42 +2,56 @@ import { css } from "hono/css";
 
 export const globalStyles = css`
   :root {
-    color-scheme: dark;
+    color-scheme: light;
 
-    --bg: #08090b;
-    --panel: #0e1013;
-    --panel-edge: #1a1d22;
-    --line: #2a1116;
-    --line-strong: #7a1020;
-    --accent: #ff2e3e;
-    --cyan: #00e5e8;
-    --yellow: #fcee0a;
-    --text: #d3d7de;
-    --text-dim: #7b828e;
+    --gray-0: #ffffff;
+    --gray-25: #fcfcfd;
+    --gray-50: #f8f9fa;
+    --gray-100: #f1f3f5;
+    --gray-200: #e9ecef;
+    --gray-300: #dee2e6;
+    --gray-400: #adb5bd;
+    --gray-500: #868e96;
+    --gray-700: #495057;
+    --gray-900: #212529;
 
-    --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    --font-ui: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    --accent: #2563eb;
+    --accent-hover: #1d4ed8;
+    --accent-soft: #eff4ff;
 
-    --gap: 1rem;
-    --gap-lg: 2rem;
+    --danger: #e03131;
+    --danger-soft: #fff5f5;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+
+    --font-sans: system-ui, -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif;
   }
 
   html,
   body {
     margin: 0;
-    background: var(--bg);
-    color: var(--text);
+    background: var(--gray-50);
+    color: var(--gray-900);
   }
 
   body {
-    padding: 2rem 1.5rem 4rem;
-    font-family: var(--font-ui);
+    padding: var(--space-6) var(--space-4);
+    font-family: var(--font-sans);
     font-size: 0.9375rem;
     line-height: 1.6;
   }
 
   a {
-    color: var(--cyan);
+    color: var(--accent);
     text-decoration: none;
   }
 
@@ -59,17 +73,11 @@ export const containerClass = css`
 `;
 
 export const headerClass = css`
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--gap);
-  margin: 0 0 0.25rem;
-  font-family: var(--font-mono);
-  font-size: 1.25rem;
+  margin: 0 0 var(--space-5);
+  font-size: 1.5rem;
   font-weight: 600;
-  letter-spacing: 0.32em;
-  text-transform: uppercase;
-  color: var(--text);
+  letter-spacing: -0.01em;
+  color: var(--gray-900);
 `;
 
 export const tableClass = css`
@@ -137,10 +145,12 @@ export const badgeClass = css`
 `;
 
 export const formClass = css`
-  margin-bottom: var(--gap-lg);
-  padding: 1.5rem;
-  background: var(--panel);
-  border: 1px solid var(--panel-edge);
+  margin-bottom: var(--space-5);
+  padding: var(--space-5);
+  background: var(--gray-0);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 
   label {
     display: block;
@@ -258,17 +268,27 @@ export const errorBoxClass = css`
 `;
 
 export const emptyClass = css`
-  padding: 4rem 1rem;
+  padding: var(--space-6) var(--space-4);
   text-align: center;
-  color: var(--text-dim);
-  background: var(--panel);
-  border: 1px solid var(--panel-edge);
+  color: var(--gray-500);
+  background: var(--gray-0);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+
+  p {
+    margin: 0;
+  }
 `;
 
 export const errorPageClass = css`
-  padding: 3rem 1rem;
+  padding: var(--space-6) var(--space-4);
   text-align: center;
-  color: var(--accent);
+  color: var(--danger);
+  background: var(--gray-0);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
 `;
 
 export const ghostButtonClass = css`

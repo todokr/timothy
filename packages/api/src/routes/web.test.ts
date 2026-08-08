@@ -168,10 +168,20 @@ describe("GET /", () => {
     expect(html).not.toContain("addEventListener");
   });
 
-  it("declares a dark color scheme", async () => {
+  it("declares a light color scheme", async () => {
     vi.mocked(listFiles).mockResolvedValue([]);
     const html = await (await app.request("/")).text();
-    expect(html).toMatch(/color-scheme:\s*dark/);
+    expect(html).toMatch(/color-scheme:\s*light/);
+    expect(html).not.toMatch(/color-scheme:\s*dark/);
+  });
+
+  // webStyles.ts の import が外れたり <Style> が空になったりすると、
+  // 画面は無スタイルになるが他のテストは通ってしまうため、ここで検出する。
+  it("emits the stylesheet with the accent token", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain('<style id="hono-css">');
+    expect(html).toContain("#2563eb");
   });
 
 });
