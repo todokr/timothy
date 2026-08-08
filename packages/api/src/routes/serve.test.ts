@@ -41,14 +41,21 @@ describe("GET /s/:id", () => {
 
   // Uploaded HTML is served from the same origin as the admin UI, so without a
   // sandbox a script inside it could call /files and /files/:id from behind the
-  // IP allowlist. `allow-scripts` without `allow-same-origin` keeps scripts
-  // (charts etc.) working while placing the document in an opaque origin.
+  // IP allowlist. The grants below keep ordinary report behaviour working —
+  // scripts (charts), popups (source links), downloads (CSV exports) and
+  // modals (alert/confirm) — while omitting `allow-same-origin`, which keeps the
+  // document in an opaque origin. `allow-forms` is deliberately not granted.
   it("sets a sandbox CSP on the served document", async () => {
     mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
     const res = await app.request("/01ABC");
-    expect(res.headers.get("content-security-policy")).toBe("sandbox allow-scripts");
+    expect(res.headers.get("content-security-policy")).toBe(
+      "sandbox allow-scripts allow-popups allow-downloads allow-modals",
+    );
   });
 
+  // Guards the one token that would undo the sandbox: with allow-same-origin the
+  // document leaves its opaque origin and its scripts can reach /files and
+  // /upload as same-origin requests. This must fail if anyone ever adds it.
   it("does not grant allow-same-origin", async () => {
     mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
     const res = await app.request("/01ABC");
