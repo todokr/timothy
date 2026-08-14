@@ -2,8 +2,6 @@
 
 LLMが生成したHTMLをターミナルからアップロードし、有効期限付きURLで共有するセルフホスト型ツールです。
 
-[English README](./README.md)
-
 ## 特徴
 
 - HTMLをCLIまたはWeb画面からアップロード & 閲覧
