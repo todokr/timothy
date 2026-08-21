@@ -49,7 +49,10 @@ describe("GET /s/:id", () => {
     mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
     const res = await app.request("/01ABC");
     expect(res.headers.get("content-security-policy")).toBe(
-      "sandbox allow-scripts allow-popups allow-downloads allow-modals",
+      "sandbox allow-scripts allow-popups allow-downloads allow-modals; " +
+        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
+        "img-src data: blob:; font-src data:; connect-src 'none'; " +
+        "form-action 'none'; base-uri 'none'",
     );
   });
 
@@ -60,6 +63,23 @@ describe("GET /s/:id", () => {
     mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
     const res = await app.request("/01ABC");
     expect(res.headers.get("content-security-policy")).not.toContain("allow-same-origin");
+  });
+
+  // The sandbox stops the document reaching the admin API but leaves outbound
+  // traffic untouched. This is the directive that keeps a report from shipping
+  // its contents to an external host, so it gets its own tripwire.
+  it("denies outbound connections", async () => {
+    mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
+    const res = await app.request("/01ABC");
+    expect(res.headers.get("content-security-policy")).toContain("connect-src 'none'");
+  });
+
+  // 'self' matches nothing in an opaque origin, so reaching for it in any
+  // directive means someone has misread how the sandbox works.
+  it("never uses 'self' in any directive", async () => {
+    mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
+    const res = await app.request("/01ABC");
+    expect(res.headers.get("content-security-policy")).not.toContain("'self'");
   });
 
   it("returns 404 for an unknown id", async () => {
