@@ -88,6 +88,7 @@ gcloud run deploy timothy-api \
 | `FIREBASE_STORAGE_BUCKET` | Cloud Storage バケット名 | 環境変数（非シークレット） |
 | `FIRESTORE_DATABASE_ID` | （任意）`(default)` 以外の名前付きFirestoreデータベースを使う場合のみ設定 | 環境変数（非シークレット） |
 | `PORT` | サーバーのリッスンポート（デフォルト: 3000） | Cloud Run が 8080 を自動注入 |
+| `ALLOW_UNSANDBOXED_CONTENT` | （任意）`true` のときだけヘッダ設定に `allow-same-origin` が出る。有効にしたコンテンツは管理画面と同一オリジンで動き、その中の JS が `/files`・`/upload`・`DELETE /files/<id>` を実行できる | 環境変数（既定は未設定＝不可） |
 
 ---
 

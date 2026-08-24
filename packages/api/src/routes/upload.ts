@@ -3,6 +3,7 @@ import { db } from "../lib/firebase.js";
 import { UPLOAD_CONTENT_TYPE, generateSignedUploadUrl } from "../lib/storage.js";
 import { ulid } from "ulid";
 import { addSeconds, now } from "../lib/time.js";
+import { isJsonContentType } from "../lib/http.js";
 
 const STORAGE_BASE_PATH = "timothy-files";
 const HTML_FILES_COLLECTION = "htmlFiles";
@@ -42,16 +43,6 @@ export function parseUploadRequest(body: unknown): ParseResult {
 }
 
 const app = new Hono();
-
-/**
- * `c.req.json()` は Content-Type を見ずに本文を解釈するため、
- * `<form enctype="text/plain">` によるクロスオリジン投稿が
- * CORS プリフライトなしで到達してしまう。application/json を必須にして塞ぐ。
- */
-export function isJsonContentType(header: string | undefined): boolean {
-  if (!header) return false;
-  return header.split(";")[0].trim().toLowerCase() === "application/json";
-}
 
 app.post("/", async (c) => {
   if (!isJsonContentType(c.req.header("content-type"))) {

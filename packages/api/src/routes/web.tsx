@@ -2,7 +2,21 @@ import { Hono } from "hono";
 import { Style } from "hono/css";
 import { raw } from "hono/html";
 import { listFiles, resolveBaseUrl, type FileEntry } from "../lib/files.js";
-import { CLIENT_SCRIPT } from "./webScript.js";
+import { CLIENT_SCRIPT, SETTINGS_SCRIPT } from "./webScript.js";
+import { db } from "../lib/firebase.js";
+import {
+  CACHE_CONTROL_VALUES,
+  DEFAULT_SANDBOX_TOKENS,
+  REFERRER_POLICY_VALUES,
+  SANDBOX_TOKEN_RISK,
+  SOURCE_KEYS,
+  X_FRAME_OPTIONS_VALUES,
+  availableSandboxTokens,
+  buildCsp,
+  type ResponseHeaderSettings,
+  type SandboxToken,
+  type SourceKey,
+} from "../lib/responseHeaders.js";
 import {
   globalStyles,
   containerClass,
@@ -19,6 +33,11 @@ import {
   ghostButtonClass,
   dangerButtonClass,
   rowErrorClass,
+  previewClass,
+  previewLabelClass,
+  tokenListClass,
+  riskBadgeClass,
+  formActionsClass,
 } from "./webStyles.js";
 
 const JST_FORMATTER = new Intl.DateTimeFormat("sv-SE", {
@@ -42,7 +61,7 @@ export function isExpired(iso: string, nowMs: number): boolean {
 // ブラウザが互換モード (quirks mode) で描画するのを防ぐ。
 const DOCTYPE = raw("<!DOCTYPE html>");
 
-function Layout(props: { children: unknown; withScript?: boolean }) {
+function Layout(props: { children: unknown; script?: string }) {
   return (
     <>
       {DOCTYPE}
@@ -55,8 +74,8 @@ function Layout(props: { children: unknown; withScript?: boolean }) {
         </head>
         <body>
           <div class={containerClass}>{props.children}</div>
-          {props.withScript ? (
-            <script dangerouslySetInnerHTML={{ __html: CLIENT_SCRIPT }}></script>
+          {props.script ? (
+            <script dangerouslySetInnerHTML={{ __html: props.script }}></script>
           ) : null}
         </body>
       </html>
@@ -109,10 +128,20 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
               <td>{formatJst(file.expiresAt)}</td>
               <td>{formatJst(file.createdAt)}</td>
               <td>
-                <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
-                  削除
-                </button>
-                <span class={rowErrorClass} data-row-error></span>
+                {/*
+                  エラー表示もこの flex 行に入れる。外に出すとブロック要素の下に
+                  もう一行できてしまい、td の vertical-align: middle と相まって
+                  ボタンだけが他の列より上にずれる。
+                */}
+                <div class={shareCellClass}>
+                  <a class={ghostButtonClass} href={`/files/${file.id}/headers/edit`}>
+                    ヘッダ設定
+                  </a>
+                  <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
+                    削除
+                  </button>
+                  <span class={rowErrorClass} data-row-error></span>
+                </div>
               </td>
             </tr>
           ))}
@@ -177,10 +206,168 @@ app.get("/", async (c) => {
     files.length === 0 ? "まだファイルがありません" : "有効期限内のファイルがありません";
 
   return c.html(
-    <Layout withScript>
+    <Layout script={CLIENT_SCRIPT}>
       <h1 class={headerClass}>Tim</h1>
       <UploadForm />
       <FileTable files={live} emptyMessage={emptyMessage} />
+    </Layout>
+  );
+});
+
+/**
+ * 各トークンで何ができるようになるかの説明。
+ *
+ * Partial ではなく全キー必須にしてあるので、SANDBOX_TOKEN_RISK にトークンを
+ * 足すと説明が無いままではコンパイルが通らない。危険度のバッジだけあって
+ * 中身が分からない選択肢が増えるのを型で防ぐ。
+ */
+const TOKEN_DESCRIPTION: Record<SandboxToken, string> = {
+  "allow-scripts": "レポート内の JavaScript が動きます（グラフ描画など）",
+  "allow-popups": "レポートが新しいタブを開けます",
+  "allow-downloads": "レポートがファイルのダウンロードを促せます",
+  "allow-modals": "レポートが alert() / confirm() を表示できます",
+  "allow-pointer-lock": "レポートがマウスカーソルを固定できます",
+  "allow-orientation-lock": "レポートが画面の向きを固定できます",
+  "allow-presentation": "レポートが外部ディスプレイへの表示を開始できます",
+  "allow-top-navigation-by-user-activation": "クリック操作で閲覧者を外部サイトへ移動させられます",
+  "allow-forms": "レポートが入力内容を外部サイトへ送信できます",
+  "allow-popups-to-escape-sandbox": "レポートが開いたタブがこの制限の外に出ます",
+  "allow-top-navigation": "レポートが閲覧者を任意のサイトへ勝手に移動させられます",
+  "allow-same-origin":
+    "このインスタンスの全ファイルの一覧取得・閲覧・削除がレポートから可能になります",
+};
+
+const SOURCE_LABEL: Record<SourceKey, string> = {
+  script: "スクリプト (script-src)",
+  style: "スタイル (style-src)",
+  img: "画像 (img-src)",
+  font: "フォント (font-src)",
+  connect: "通信先 (connect-src)",
+};
+
+function SettingsForm(props: { settings?: ResponseHeaderSettings }) {
+  const tokens = props.settings?.sandbox;
+  return (
+    <form id="settings-form" class={formClass}>
+      <p id="form-error" class={errorBoxClass} hidden></p>
+
+      <div class={tokenListClass}>
+        {availableSandboxTokens().map((token) => {
+          const risk = SANDBOX_TOKEN_RISK[token];
+          return (
+            <label key={token}>
+              <input
+                type="checkbox"
+                data-token={token}
+                data-risk={risk}
+                data-description={TOKEN_DESCRIPTION[token]}
+                checked={
+                  tokens
+                    ? tokens.includes(token)
+                    : (DEFAULT_SANDBOX_TOKENS as readonly string[]).includes(token)
+                }
+              />
+              <code>{token}</code>
+              {risk === "safe" ? null : (
+                <em class={riskBadgeClass} data-risk={risk}>
+                  {risk === "danger" ? "危険" : "注意"}
+                </em>
+              )}
+              <span>{TOKEN_DESCRIPTION[token]}</span>
+            </label>
+          );
+        })}
+      </div>
+
+      {SOURCE_KEYS.map((key) => (
+        <label key={key}>
+          {SOURCE_LABEL[key]}
+          {/* textarea の値は value 属性ではなく子要素。属性で書くと表示されない。 */}
+          <textarea data-source={key} rows={3} placeholder="https://cdn.example.com">
+            {(props.settings?.allowedSources?.[key] ?? []).join("\n")}
+          </textarea>
+        </label>
+      ))}
+
+      <label>
+        Cache-Control
+        <select data-field="cacheControl">
+          <option value="">設定しない</option>
+          {CACHE_CONTROL_VALUES.map((value) => (
+            <option key={value} value={value} selected={props.settings?.cacheControl === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        X-Frame-Options
+        <select data-field="xFrameOptions">
+          <option value="">設定しない</option>
+          {X_FRAME_OPTIONS_VALUES.map((value) => (
+            <option key={value} value={value} selected={props.settings?.xFrameOptions === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        Referrer-Policy
+        <select data-field="referrerPolicy">
+          <option value="">設定しない</option>
+          {REFERRER_POLICY_VALUES.map((value) => (
+            <option key={value} value={value} selected={props.settings?.referrerPolicy === value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div class={formActionsClass}>
+        <button id="save-button" type="submit" class={submitButtonClass}>
+          保存
+        </button>
+        <button id="reset-button" type="button" class={ghostButtonClass}>
+          既定に戻す
+        </button>
+      </div>
+    </form>
+  );
+}
+
+app.get("/files/:id/headers/edit", async (c) => {
+  const id = c.req.param("id");
+
+  const doc = await db.collection("htmlFiles").doc(id).get();
+  if (!doc.exists) {
+    return c.html(
+      <Layout>
+        <h1 class={headerClass}>Tim</h1>
+        <p class={errorPageClass}>指定されたファイルが見つかりません。</p>
+      </Layout>,
+      404
+    );
+  }
+
+  const data = doc.data()!;
+  const settings: ResponseHeaderSettings | undefined = data.responseHeaders;
+
+  return c.html(
+    <Layout script={SETTINGS_SCRIPT}>
+      <h1 class={headerClass}>ヘッダ設定 — {data.title}</h1>
+      <p>
+        <a href="/">← 一覧に戻る</a>
+      </p>
+      {/*
+        説明文ではなく現物を出す。ただしこれは保存済みの内容であって、
+        下のフォームの編集中の状態ではない。取り違えると
+        「反映されていない」と誤解されるので、見出しで明示する。
+      */}
+      <p class={previewLabelClass}>現在このファイルに適用されているポリシー（保存後に更新されます）</p>
+      <p class={previewClass}>{buildCsp(settings)}</p>
+      <SettingsForm settings={settings} />
     </Layout>
   );
 });

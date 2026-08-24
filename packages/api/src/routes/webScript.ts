@@ -177,3 +177,100 @@ export const CLIENT_SCRIPT = `
   });
 })();
 `;
+
+/**
+ * ヘッダ設定画面のクライアントスクリプト。
+ *
+ * 送出される CSP はサーバが組み立てたものを表示するだけで、ここでは組み立てない。
+ * 同じ組み立てを 2 か所に持つと、プレビューと実際の配信が食い違いうる。
+ */
+export const SETTINGS_SCRIPT = `
+(function () {
+  var form = document.getElementById("settings-form");
+  var saveButton = document.getElementById("save-button");
+  var resetButton = document.getElementById("reset-button");
+  var errorBox = document.getElementById("form-error");
+
+  function showError(message) {
+    errorBox.textContent = message;
+    errorBox.hidden = false;
+  }
+
+  function parseOrigins(value) {
+    return value
+      .split("\\n")
+      .map(function (line) { return line.trim(); })
+      .filter(function (line) { return line.length > 0; });
+  }
+
+  function collect() {
+    var settings = {};
+
+    var tokens = [];
+    form.querySelectorAll("[data-token]").forEach(function (box) {
+      if (box.checked) tokens.push(box.dataset.token);
+    });
+    if (tokens.length > 0) settings.sandbox = tokens;
+
+    var sources = {};
+    form.querySelectorAll("[data-source]").forEach(function (area) {
+      var origins = parseOrigins(area.value);
+      if (origins.length > 0) sources[area.dataset.source] = origins;
+    });
+    if (Object.keys(sources).length > 0) settings.allowedSources = sources;
+
+    form.querySelectorAll("[data-field]").forEach(function (select) {
+      if (select.value) settings[select.dataset.field] = select.value;
+    });
+
+    return settings;
+  }
+
+  function confirmDangerous() {
+    var checked = [];
+    form.querySelectorAll('[data-token][data-risk="danger"]').forEach(function (box) {
+      if (box.checked) checked.push(box.dataset.token + " … " + box.dataset.description);
+    });
+    if (checked.length === 0) return true;
+    return confirm(
+      "次の設定はこのコンテンツの隔離を弱めます。\\n\\n" +
+      checked.join("\\n") +
+      "\\n\\n保存しますか？"
+    );
+  }
+
+  async function save(settings) {
+    errorBox.hidden = true;
+    saveButton.disabled = true;
+
+    try {
+      var res = await fetch(location.pathname.replace(/\\/edit$/, ""), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      if (!res.ok) {
+        var body = await res.json().catch(function () { return {}; });
+        showError(body.error || "保存に失敗しました (HTTP " + res.status + ")");
+        return;
+      }
+      location.reload();
+    } catch (err) {
+      showError("保存に失敗しました: " + err.message);
+    } finally {
+      saveButton.disabled = false;
+    }
+  }
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (!confirmDangerous()) return;
+    save(collect());
+  });
+
+  resetButton.addEventListener("click", function () {
+    if (!confirm("このコンテンツの設定を既定に戻しますか？")) return;
+    save({});
+  });
+})();
+`;

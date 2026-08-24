@@ -82,6 +82,57 @@ describe("GET /s/:id", () => {
     expect(res.headers.get("content-security-policy")).not.toContain("'self'");
   });
 
+  // Per-content settings only widen the baseline. The header names are fixed in
+  // the route, so nothing stored on the document can name a header of its own.
+  describe("with stored settings", () => {
+    it("applies the widened policy and the extra headers", async () => {
+      mockDoc({
+        exists: true,
+        data: () => ({
+          storagePath: "p",
+          expiresAt: future(),
+          responseHeaders: {
+            allowedSources: { script: ["https://cdn.example.com"] },
+            xFrameOptions: "DENY",
+            referrerPolicy: "no-referrer",
+          },
+        }),
+      });
+      const res = await app.request("/01ABC");
+
+      expect(res.headers.get("content-security-policy")).toContain(
+        "script-src 'unsafe-inline' https://cdn.example.com",
+      );
+      expect(res.headers.get("x-frame-options")).toBe("DENY");
+      expect(res.headers.get("referrer-policy")).toBe("no-referrer");
+    });
+
+    // max-age comes from the document's own expiry, so a cached copy cannot
+    // outlive the share link.
+    it("caps Cache-Control at the remaining TTL", async () => {
+      mockDoc({
+        exists: true,
+        data: () => ({
+          storagePath: "p",
+          expiresAt: future(),
+          responseHeaders: { cacheControl: "public" },
+        }),
+      });
+      const res = await app.request("/01ABC");
+
+      expect(res.headers.get("cache-control")).toMatch(/^public, max-age=\d+$/);
+    });
+
+    it("omits the optional headers when they are not configured", async () => {
+      mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
+      const res = await app.request("/01ABC");
+
+      expect(res.headers.get("cache-control")).toBeNull();
+      expect(res.headers.get("x-frame-options")).toBeNull();
+      expect(res.headers.get("referrer-policy")).toBeNull();
+    });
+  });
+
   it("returns 404 for an unknown id", async () => {
     mockDoc({ exists: false });
     expect((await app.request("/nope")).status).toBe(404);

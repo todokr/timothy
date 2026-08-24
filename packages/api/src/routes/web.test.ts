@@ -5,7 +5,12 @@ vi.mock("../lib/files.js", () => ({
   resolveBaseUrl: vi.fn().mockReturnValue("http://localhost"),
 }));
 
+vi.mock("../lib/firebase.js", () => ({
+  db: { collection: vi.fn() },
+}));
+
 import { listFiles } from "../lib/files.js";
+import { db } from "../lib/firebase.js";
 import app, { formatJst, isExpired } from "./web.js";
 
 function entry(overrides: Record<string, unknown> = {}) {
@@ -266,5 +271,103 @@ describe("CLIENT_SCRIPT", () => {
     expect(putFailure).toContain("ファイル情報だけが登録されている場合があります");
     expect(putFailure).toContain("再読み込み");
     expect(putFailure).toMatch(/setTimeout\(function \(\) \{ location\.reload\(\); \}, \d+\)/);
+  });
+});
+
+describe("GET /files/:id/headers/edit", () => {
+  function mockDoc(exists: boolean, responseHeaders?: unknown) {
+    vi.mocked(db.collection).mockReturnValue({
+      doc: vi.fn().mockReturnValue({
+        get: vi.fn().mockResolvedValue({
+          exists,
+          data: () => ({ title: "Monthly Report", responseHeaders }),
+        }),
+      }),
+    } as unknown as ReturnType<typeof db.collection>);
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.ALLOW_UNSANDBOXED_CONTENT;
+  });
+
+  it("returns 404 for an unknown id", async () => {
+    mockDoc(false);
+    expect((await app.request("/files/01MISSING/headers/edit")).status).toBe(404);
+  });
+
+  // The page shows the policy actually being sent rather than describing it, so
+  // a mismatch between the copy and the behaviour cannot develop.
+  it("shows the policy currently in effect", async () => {
+    mockDoc(true, undefined);
+    const html = await (await app.request("/files/01ABC/headers/edit")).text();
+    expect(html).toContain("connect-src &#39;none&#39;");
+  });
+
+  // Asserts the text *between* the tags. A textarea has no value attribute —
+  // rendering one produces markup that contains the origin but shows an empty
+  // box, which a plain toContain on the whole page would happily accept.
+  it("puts stored origins inside the textarea, not on an attribute", async () => {
+    mockDoc(true, {
+      allowedSources: { script: ["https://a.example.com", "https://b.example.com"] },
+    });
+    const html = await (await app.request("/files/01ABC/headers/edit")).text();
+
+    const textarea = html.match(/<textarea data-source="script"[^>]*>([\s\S]*?)<\/textarea>/);
+    expect(textarea?.[1]).toBe("https://a.example.com\nhttps://b.example.com");
+  });
+
+  it("leaves the textarea empty when nothing is stored", async () => {
+    mockDoc(true, undefined);
+    const html = await (await app.request("/files/01ABC/headers/edit")).text();
+
+    const textarea = html.match(/<textarea data-source="script"[^>]*>([\s\S]*?)<\/textarea>/);
+    expect(textarea?.[1]).toBe("");
+  });
+
+  // A stored sandbox list is the final set, not a delta, so the checkboxes must
+  // follow it exactly — including the defaults it leaves out.
+  it("checks exactly the stored sandbox tokens", async () => {
+    mockDoc(true, { sandbox: ["allow-scripts"] });
+    const html = await (await app.request("/files/01ABC/headers/edit")).text();
+
+    expect(html).toMatch(/data-token="allow-scripts"[^>]*checked/);
+    expect(html).not.toMatch(/data-token="allow-popups"[^>]*checked/);
+  });
+
+  // Every token says what it enables, not just the risky ones — a checkbox
+  // whose effect is unstated is not a choice the user can actually make.
+  it("describes every token, including the safe ones", async () => {
+    mockDoc(true, undefined);
+    const html = await (await app.request("/files/01ABC/headers/edit")).text();
+
+    expect(html).toContain("レポート内の JavaScript が動きます");
+    expect(html).toContain("マウスカーソルを固定");
+  });
+
+  // The operator opts in at deploy time. Until then the option must not exist
+  // on the page at all — a disabled control still invites someone to look for
+  // a way around it.
+  it("omits allow-same-origin unless the operator enabled it", async () => {
+    mockDoc(true, undefined);
+    const html = await (await app.request("/files/01ABC/headers/edit")).text();
+    expect(html).not.toContain("allow-same-origin");
+  });
+
+  it("offers allow-same-origin with its consequence spelled out once enabled", async () => {
+    process.env.ALLOW_UNSANDBOXED_CONTENT = "true";
+    mockDoc(true, undefined);
+    const html = await (await app.request("/files/01ABC/headers/edit")).text();
+
+    expect(html).toContain("allow-same-origin");
+    expect(html).toContain("全ファイルの一覧取得・閲覧・削除");
+  });
+});
+
+describe("the file list", () => {
+  it("links each row to its header settings", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry()]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain('href="/files/01ABC/headers/edit"');
   });
 });
