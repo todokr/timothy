@@ -21,6 +21,9 @@ URLはCloud Run / AWS Lambda上のAPIを経由して配信されます。APIが�
 `data:`/`blob:`の画像は動作しますが、外部URLからの読み込み、`fetch`などの外部通信、
 `<iframe>`埋め込みはブロックされます。
 
+また共有ページ自体も、他サイトからの`<iframe>`埋め込みを拒否します
+（`X-Frame-Options: DENY`）。
+
 > **アップグレード時の注意:** CDNからライブラリを読み込んでいるレポートは動作しなくなります。
 > エラーではなくグラフが空になるなど**無言で壊れる**点に注意してください。
 > 影響は有効期限内の既存ファイルのみで、TTL経過後に解消します。
@@ -91,6 +94,19 @@ https://your-api.example.com/
 ここから、アップロード済みファイル（タイトル・説明・共有URL・有効期限・作成日時）の一覧表示、
 ファイルを選択またはドラッグ＆ドロップしてのHTMLファイルのアップロード、共有URLのコピー、
 ファイルの削除ができます。
+
+### ヘッダ設定
+
+一覧の「ヘッダ設定」から、コンテンツごとに配信時の制限を緩められます。
+既定より**緩める方向にのみ**働くため、設定によってインラインの`<script>`が
+止まることはありません。
+
+- CDNなど、読み込みを許可するオリジン（`https://` のみ）
+- `sandbox` の各トークン
+- `Cache-Control` / `Referrer-Policy`
+
+危険度は各項目に表示されます。変更内容は構造化ログ（`event: "headers.updated"`）に
+記録されますが、**認証がないため変更者は記録できません**（残るのは日時・IPアドレス・変更内容）。
 
 Web UIのアップロードはCLIと同じ署名付きURLのフローを使うため、ストレージバケットに
 CORSの設定が必要です。[セルフホスティング](#セルフホスティング) を参照してください。
@@ -245,7 +261,26 @@ gcloud run services update timothy-api \
   --set-env-vars XFF_TRUSTED_HOPS=2
 ```
 
-### 6. CLIの設定
+### 6. （オプション）sandbox解除の許可
+
+`ALLOW_UNSANDBOXED_CONTENT=true` を設定すると、ヘッダ設定に `allow-same-origin` が
+選べるようになります。**未設定の場合、この項目はUIにもAPIにも存在しません。**
+
+⚠️ **このトークンを有効にしたコンテンツは、管理画面と同じオリジンで動きます。**
+そのHTML内のスクリプトが、IP許可リストの内側から
+`/files`（全ファイルの一覧取得）・`/upload`・`DELETE /files/<id>` を実行できます。
+つまり**1つのレポートがインスタンス全体のファイルを閲覧・削除できる**ということです。
+
+WebUSBなど、権限を要求するブラウザAPIを使うコンテンツを配信する場合にのみ有効化してください
+（これらのAPIは `sandbox` 下では動作しません）。
+
+```bash
+gcloud run services update timothy-api \
+  --region ${REGION} \
+  --set-env-vars ALLOW_UNSANDBOXED_CONTENT=true
+```
+
+### 7. CLIの設定
 
 ユーザーはCloud RunサービスのURLを使ってCLIを設定します:
 

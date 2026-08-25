@@ -46,6 +46,13 @@ describe("IP allowlist coverage", () => {
     expect((await request("/s/01ABC")).status).toBe(403);
   });
 
+  // The header settings endpoints sit under /files/*, so they inherit the
+  // allowlist. Asserted explicitly because the mount is easy to move.
+  it("blocks the header settings endpoints", async () => {
+    expect((await request("/files/01ABC/headers")).status).toBe(403);
+    expect((await request("/files/01ABC/headers", "PUT")).status).toBe(403);
+  });
+
   it("does not block the health endpoint", async () => {
     expect((await request("/health")).status).toBe(200);
   });
@@ -72,5 +79,17 @@ describe("without ALLOWED_IPS", () => {
     const res = await request("/files");
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ files: [] });
+  });
+
+  // Proves the header route is actually mounted at /files/:id/headers. The
+  // allowlist returns 403 for any /files/* path whether a route exists or not,
+  // so the blocked-endpoint test above cannot tell a wrong mount from a right
+  // one. 415 comes only from the handler, so a bad mount shows up as 404 here.
+  it("mounts the header settings endpoint", async () => {
+    const res = await app.request("/files/01ABC/headers", {
+      method: "PUT",
+      headers: { "Content-Type": "text/plain", "Sec-Fetch-Site": "same-origin" },
+    });
+    expect(res.status).toBe(415);
   });
 });

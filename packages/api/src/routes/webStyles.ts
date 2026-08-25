@@ -143,6 +143,7 @@ export const tableClass = css`
 export const shareCellClass = css`
   display: flex;
   gap: var(--space-2);
+  align-items: center;
 `;
 
 export const formClass = css`
@@ -199,6 +200,40 @@ export const formClass = css`
     font: inherit;
     font-size: 0.875rem;
     color: var(--gray-700);
+  }
+
+  textarea,
+  select {
+    display: block;
+    margin-top: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    font: inherit;
+    font-weight: 400;
+    color: var(--gray-900);
+    background: var(--gray-0);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+  }
+
+  textarea {
+    width: 100%;
+    max-width: 32rem;
+    min-height: 4.5rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8125rem;
+    resize: vertical;
+  }
+
+  select {
+    height: 2.25rem;
+    padding: 0 var(--space-2);
+  }
+
+  textarea:focus,
+  select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
 
   input[type="file"]::file-selector-button {
@@ -374,4 +409,91 @@ export const rowErrorClass = css`
   margin-left: var(--space-2);
   font-size: 0.8125rem;
   color: var(--danger);
+`;
+
+export const previewClass = css`
+  margin: 0 0 var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  color: var(--gray-700);
+  word-break: break-all;
+  white-space: pre-wrap;
+  background: var(--gray-100);
+  border-radius: var(--radius-sm);
+`;
+
+export const tokenListClass = css`
+  margin-bottom: var(--space-4);
+
+  label {
+    display: flex;
+    gap: var(--space-2);
+    align-items: baseline;
+    margin-bottom: var(--space-2);
+    font-weight: 400;
+  }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.8125rem;
+  }
+
+  span {
+    color: var(--gray-500);
+  }
+`;
+
+/*
+ * 危険度は色だけで示さない。色覚特性や白黒印刷で区別が付かなくなると、
+ * 隔離を弱める設定を安全なものと同じに見せてしまう。記号と文言を必ず伴わせる。
+ */
+export const riskBadgeClass = css`
+  flex-shrink: 0;
+  padding: 0 var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+  border-radius: var(--radius-sm);
+
+  &[data-risk="caution"] {
+    color: #92400e;
+    background: #fef3c7;
+  }
+
+  &[data-risk="danger"] {
+    color: var(--danger);
+    background: var(--danger-soft);
+  }
+`;
+
+/*
+ * フォーム下部のボタン列。ghostButtonClass は一覧の行高に合わせて 1.75rem なので、
+ * そのまま置くと送信ボタン (2.25rem) と高さが揃わない。行内での寸法は変えたくないため、
+ * この文脈でだけ上書きする。
+ */
+export const formActionsClass = css`
+  display: flex;
+  gap: var(--space-2);
+
+  button {
+    height: 2.25rem;
+    font-size: 0.875rem;
+  }
+`;
+
+export const previewLabelClass = css`
+  margin: 0 0 var(--space-2);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--gray-500);
+`;
+
+export const fieldNoteClass = css`
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--gray-500);
 `;

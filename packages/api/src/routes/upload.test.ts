@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import app, { parseUploadRequest, isJsonContentType } from "./upload.js";
+import app, { parseUploadRequest } from "./upload.js";
 
 vi.mock("../lib/firebase.js", () => ({
   db: {
@@ -75,27 +75,6 @@ describe("parseUploadRequest", () => {
   it("returns ok:false when body is null", () => {
     const result = parseUploadRequest(null);
     expect(result.ok).toBe(false);
-  });
-});
-
-describe("isJsonContentType", () => {
-  it("accepts application/json", () => {
-    expect(isJsonContentType("application/json")).toBe(true);
-  });
-
-  it("accepts application/json with a charset parameter and odd casing", () => {
-    expect(isJsonContentType("Application/JSON; charset=utf-8")).toBe(true);
-    expect(isJsonContentType("  application/json ; charset=UTF-8")).toBe(true);
-  });
-
-  it("rejects a missing header", () => {
-    expect(isJsonContentType(undefined)).toBe(false);
-  });
-
-  it("rejects the simple-request content types usable for cross-origin form posts", () => {
-    expect(isJsonContentType("text/plain")).toBe(false);
-    expect(isJsonContentType("application/x-www-form-urlencoded")).toBe(false);
-    expect(isJsonContentType("multipart/form-data; boundary=x")).toBe(false);
   });
 });
 
