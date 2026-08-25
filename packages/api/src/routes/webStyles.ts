@@ -489,3 +489,11 @@ export const previewLabelClass = css`
   font-weight: 500;
   color: var(--gray-500);
 `;
+
+export const fieldNoteClass = css`
+  display: block;
+  margin-top: var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--gray-500);
+`;

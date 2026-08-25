@@ -52,7 +52,7 @@ describe("GET /s/:id", () => {
       "sandbox allow-scripts allow-popups allow-downloads allow-modals; " +
         "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
         "img-src data: blob:; font-src data:; connect-src 'none'; " +
-        "form-action 'none'; base-uri 'none'",
+        "frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
     );
   });
 
@@ -82,6 +82,15 @@ describe("GET /s/:id", () => {
     expect(res.headers.get("content-security-policy")).not.toContain("'self'");
   });
 
+  // Both headers, because neither implies the other — rationale at buildCsp.
+  it("refuses to be framed, and says so both ways", async () => {
+    mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
+    const res = await app.request("/01ABC");
+
+    expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+  });
+
   // Per-content settings only widen the baseline. The header names are fixed in
   // the route, so nothing stored on the document can name a header of its own.
   describe("with stored settings", () => {
@@ -93,7 +102,6 @@ describe("GET /s/:id", () => {
           expiresAt: future(),
           responseHeaders: {
             allowedSources: { script: ["https://cdn.example.com"] },
-            xFrameOptions: "DENY",
             referrerPolicy: "no-referrer",
           },
         }),
@@ -103,7 +111,6 @@ describe("GET /s/:id", () => {
       expect(res.headers.get("content-security-policy")).toContain(
         "script-src 'unsafe-inline' https://cdn.example.com",
       );
-      expect(res.headers.get("x-frame-options")).toBe("DENY");
       expect(res.headers.get("referrer-policy")).toBe("no-referrer");
     });
 
@@ -128,7 +135,6 @@ describe("GET /s/:id", () => {
       const res = await app.request("/01ABC");
 
       expect(res.headers.get("cache-control")).toBeNull();
-      expect(res.headers.get("x-frame-options")).toBeNull();
       expect(res.headers.get("referrer-policy")).toBeNull();
     });
   });

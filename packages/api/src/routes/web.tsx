@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import { Style } from "hono/css";
 import { raw } from "hono/html";
-import { listFiles, resolveBaseUrl, type FileEntry } from "../lib/files.js";
+import {
+  HTML_FILES_COLLECTION,
+  listFiles,
+  resolveBaseUrl,
+  type FileEntry,
+} from "../lib/files.js";
 import { CLIENT_SCRIPT, SETTINGS_SCRIPT } from "./webScript.js";
 import { db } from "../lib/firebase.js";
 import {
@@ -10,7 +15,6 @@ import {
   REFERRER_POLICY_VALUES,
   SANDBOX_TOKEN_RISK,
   SOURCE_KEYS,
-  X_FRAME_OPTIONS_VALUES,
   availableSandboxTokens,
   buildCsp,
   type ResponseHeaderSettings,
@@ -35,6 +39,7 @@ import {
   rowErrorClass,
   previewClass,
   previewLabelClass,
+  fieldNoteClass,
   tokenListClass,
   riskBadgeClass,
   formActionsClass,
@@ -299,18 +304,10 @@ function SettingsForm(props: { settings?: ResponseHeaderSettings }) {
             </option>
           ))}
         </select>
-      </label>
-
-      <label>
-        X-Frame-Options
-        <select data-field="xFrameOptions">
-          <option value="">設定しない</option>
-          {X_FRAME_OPTIONS_VALUES.map((value) => (
-            <option key={value} value={value} selected={props.settings?.xFrameOptions === value}>
-              {value}
-            </option>
-          ))}
-        </select>
+        <span class={fieldNoteClass}>
+          有効期限までの max-age は自動で付きます。public は CDN やプロキシなど共有キャッシュにも
+          保存されるため、期限が切れてもキャッシュ上のコピーは消せません。
+        </span>
       </label>
 
       <label>
@@ -323,6 +320,9 @@ function SettingsForm(props: { settings?: ResponseHeaderSettings }) {
             </option>
           ))}
         </select>
+        <span class={fieldNoteClass}>
+          レポート内のリンクを開いたとき、リンク先に送られる参照元 URL を制限します。
+        </span>
       </label>
 
       <div class={formActionsClass}>
@@ -340,7 +340,7 @@ function SettingsForm(props: { settings?: ResponseHeaderSettings }) {
 app.get("/files/:id/headers/edit", async (c) => {
   const id = c.req.param("id");
 
-  const doc = await db.collection("htmlFiles").doc(id).get();
+  const doc = await db.collection(HTML_FILES_COLLECTION).doc(id).get();
   if (!doc.exists) {
     return c.html(
       <Layout>

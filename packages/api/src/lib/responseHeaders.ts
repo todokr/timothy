@@ -81,7 +81,6 @@ export const SOURCE_KEYS = ["script", "style", "img", "font", "connect"] as cons
 export type SourceKey = (typeof SOURCE_KEYS)[number];
 
 export const CACHE_CONTROL_VALUES = ["no-store", "private", "public"] as const;
-export const X_FRAME_OPTIONS_VALUES = ["DENY", "SAMEORIGIN"] as const;
 export const REFERRER_POLICY_VALUES = [
   "no-referrer",
   "same-origin",
@@ -94,7 +93,6 @@ export type ResponseHeaderSettings = {
   /** 既定値に**追加する**オリジン。既定の 'unsafe-inline' / data: / blob: は打ち消せない。 */
   allowedSources?: Partial<Record<SourceKey, string[]>>;
   cacheControl?: (typeof CACHE_CONTROL_VALUES)[number];
-  xFrameOptions?: (typeof X_FRAME_OPTIONS_VALUES)[number];
   referrerPolicy?: (typeof REFERRER_POLICY_VALUES)[number];
 };
 
@@ -186,7 +184,7 @@ export function parseSettings(body: unknown): ParseResult {
     return { ok: false, error: "Body must be an object" };
   }
 
-  const known = ["sandbox", "allowedSources", "cacheControl", "xFrameOptions", "referrerPolicy"];
+  const known = ["sandbox", "allowedSources", "cacheControl", "referrerPolicy"];
   const unknownKeys = Object.keys(body).filter((key) => !known.includes(key));
   if (unknownKeys.length > 0) {
     return { ok: false, error: `Unsupported fields: ${unknownKeys.join(", ")}` };
@@ -209,11 +207,6 @@ export function parseSettings(body: unknown): ParseResult {
     const parsed = parseEnum(input.cacheControl, CACHE_CONTROL_VALUES, "cacheControl");
     if (!parsed.ok) return parsed;
     data.cacheControl = parsed.value;
-  }
-  if (input.xFrameOptions !== undefined) {
-    const parsed = parseEnum(input.xFrameOptions, X_FRAME_OPTIONS_VALUES, "xFrameOptions");
-    if (!parsed.ok) return parsed;
-    data.xFrameOptions = parsed.value;
   }
   if (input.referrerPolicy !== undefined) {
     const parsed = parseEnum(input.referrerPolicy, REFERRER_POLICY_VALUES, "referrerPolicy");
@@ -274,6 +267,9 @@ export function buildCsp(settings?: ResponseHeaderSettings): string {
     sourceDirective("img", settings?.allowedSources?.img),
     sourceDirective("font", settings?.allowedSources?.font),
     sourceDirective("connect", settings?.allowedSources?.connect),
+    // frame-ancestors は default-src にフォールバックしない数少ないディレクティブで、
+    // 書かないと default-src 'none' があっても任意のサイトから iframe できてしまう。
+    "frame-ancestors 'none'",
     "form-action 'none'",
     "base-uri 'none'",
   ].join("; ");
@@ -282,7 +278,7 @@ export function buildCsp(settings?: ResponseHeaderSettings): string {
 export type BuiltHeaders = {
   csp: string;
   cacheControl?: string;
-  xFrameOptions?: string;
+  xFrameOptions: string;
   referrerPolicy?: string;
 };
 
@@ -311,7 +307,9 @@ export function buildHeaders(
   return {
     csp: buildCsp(settings),
     cacheControl: cacheControlValue(settings?.cacheControl, expiresAt, nowMs),
-    xFrameOptions: settings?.xFrameOptions,
+    // frame-ancestors を解さない古いブラウザ向けの控え。設定項目にはしない
+    // ——上の frame-ancestors が常に勝つため、値を選ばせても効かない。
+    xFrameOptions: "DENY",
     referrerPolicy: settings?.referrerPolicy,
   };
 }

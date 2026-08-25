@@ -21,6 +21,9 @@ URLはCloud Run / AWS Lambda上のAPIを経由して配信されます。APIが�
 `data:`/`blob:`の画像は動作しますが、外部URLからの読み込み、`fetch`などの外部通信、
 `<iframe>`埋め込みはブロックされます。
 
+また共有ページ自体も、他サイトからの`<iframe>`埋め込みを拒否します
+（`frame-ancestors 'none'` と `X-Frame-Options: DENY`）。
+
 > **アップグレード時の注意:** CDNからライブラリを読み込んでいるレポートは動作しなくなります。
 > エラーではなくグラフが空になるなど**無言で壊れる**点に注意してください。
 > 影響は有効期限内の既存ファイルのみで、TTL経過後に解消します。
@@ -100,7 +103,7 @@ https://your-api.example.com/
 
 - CDNなど、読み込みを許可するオリジン（`https://` のみ）
 - `sandbox` の各トークン
-- `Cache-Control` / `X-Frame-Options` / `Referrer-Policy`
+- `Cache-Control` / `Referrer-Policy`
 
 危険度は各項目に表示されます。変更内容は構造化ログ（`event: "headers.updated"`）に
 記録されますが、**認証がないため変更者は記録できません**（残るのは日時・IPアドレス・変更内容）。

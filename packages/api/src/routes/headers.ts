@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../lib/firebase.js";
+import { HTML_FILES_COLLECTION } from "../lib/files.js";
 import { logger } from "../lib/logger.js";
 import { getClientIp } from "../lib/ipAllowlist.js";
 import { isJsonContentType, isSameOriginBrowserRequest } from "../lib/http.js";
@@ -9,8 +10,6 @@ import {
   riskLevel,
   type ResponseHeaderSettings,
 } from "../lib/responseHeaders.js";
-
-const HTML_FILES_COLLECTION = "htmlFiles";
 
 const app = new Hono();
 

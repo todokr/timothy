@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../lib/files.js", () => ({
+// listFiles / resolveBaseUrl だけ差し替え、HTML_FILES_COLLECTION は本物を使う。
+vi.mock("../lib/files.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/files.js")>()),
   listFiles: vi.fn(),
   resolveBaseUrl: vi.fn().mockReturnValue("http://localhost"),
 }));

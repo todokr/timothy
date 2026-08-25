@@ -14,7 +14,7 @@ const BASELINE =
   "sandbox allow-scripts allow-popups allow-downloads allow-modals; " +
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
   "img-src data: blob:; font-src data:; connect-src 'none'; " +
-  "form-action 'none'; base-uri 'none'";
+  "frame-ancestors 'none'; form-action 'none'; base-uri 'none'";
 
 describe("validateOrigin", () => {
   it("正規形の https オリジンを通す", () => {
@@ -96,7 +96,6 @@ describe("parseSettings", () => {
 
   it("列挙値以外を弾く", () => {
     expect(parseSettings({ cacheControl: "immutable" }).ok).toBe(false);
-    expect(parseSettings({ xFrameOptions: "ALLOWALL" }).ok).toBe(false);
     expect(parseSettings({ referrerPolicy: "unsafe-url" }).ok).toBe(false);
   });
 
@@ -158,12 +157,12 @@ describe("buildHeaders", () => {
   const expiresAt = new Date("2026-01-08T00:00:00Z");
   const nowMs = new Date("2026-01-01T00:00:00Z").getTime();
 
-  it("設定なしのとき CSP 以外のヘッダを出さない", () => {
+  it("設定なしでも X-Frame-Options は常に付く", () => {
     const headers = buildHeaders(undefined, expiresAt, nowMs);
     expect(headers).toEqual({
       csp: BASELINE,
       cacheControl: undefined,
-      xFrameOptions: undefined,
+      xFrameOptions: "DENY",
       referrerPolicy: undefined,
     });
   });

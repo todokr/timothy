@@ -25,7 +25,7 @@ app.get("/:id", async (c) => {
   const headers = buildHeaders(data.responseHeaders, expiresAt);
   c.header("Content-Security-Policy", headers.csp);
   if (headers.cacheControl) c.header("Cache-Control", headers.cacheControl);
-  if (headers.xFrameOptions) c.header("X-Frame-Options", headers.xFrameOptions);
+  c.header("X-Frame-Options", headers.xFrameOptions);
   if (headers.referrerPolicy) c.header("Referrer-Policy", headers.referrerPolicy);
 
   return c.html(html);
