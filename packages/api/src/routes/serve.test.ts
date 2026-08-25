@@ -52,7 +52,7 @@ describe("GET /s/:id", () => {
       "sandbox allow-scripts allow-popups allow-downloads allow-modals; " +
         "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
         "img-src data: blob:; font-src data:; connect-src 'none'; " +
-        "frame-ancestors 'none'; form-action 'none'; base-uri 'none'",
+        "form-action 'none'; base-uri 'none'",
     );
   });
 
@@ -82,13 +82,15 @@ describe("GET /s/:id", () => {
     expect(res.headers.get("content-security-policy")).not.toContain("'self'");
   });
 
-  // Both headers, because neither implies the other — rationale at buildCsp.
-  it("refuses to be framed, and says so both ways", async () => {
+  // The CSP cannot carry this: frame-ancestors is the one directive that
+  // default-src does not cover, and adding it would only suppress the header
+  // below. Rationale at buildHeaders.
+  it("refuses to be framed", async () => {
     mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
     const res = await app.request("/01ABC");
 
-    expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("content-security-policy")).not.toContain("frame-ancestors");
   });
 
   // Per-content settings only widen the baseline. The header names are fixed in

@@ -22,7 +22,7 @@ URLはCloud Run / AWS Lambda上のAPIを経由して配信されます。APIが�
 `<iframe>`埋め込みはブロックされます。
 
 また共有ページ自体も、他サイトからの`<iframe>`埋め込みを拒否します
-（`frame-ancestors 'none'` と `X-Frame-Options: DENY`）。
+（`X-Frame-Options: DENY`）。
 
 > **アップグレード時の注意:** CDNからライブラリを読み込んでいるレポートは動作しなくなります。
 > エラーではなくグラフが空になるなど**無言で壊れる**点に注意してください。

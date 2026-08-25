@@ -267,9 +267,6 @@ export function buildCsp(settings?: ResponseHeaderSettings): string {
     sourceDirective("img", settings?.allowedSources?.img),
     sourceDirective("font", settings?.allowedSources?.font),
     sourceDirective("connect", settings?.allowedSources?.connect),
-    // frame-ancestors は default-src にフォールバックしない数少ないディレクティブで、
-    // 書かないと default-src 'none' があっても任意のサイトから iframe できてしまう。
-    "frame-ancestors 'none'",
     "form-action 'none'",
     "base-uri 'none'",
   ].join("; ");
@@ -307,8 +304,11 @@ export function buildHeaders(
   return {
     csp: buildCsp(settings),
     cacheControl: cacheControlValue(settings?.cacheControl, expiresAt, nowMs),
-    // frame-ancestors を解さない古いブラウザ向けの控え。設定項目にはしない
-    // ——上の frame-ancestors が常に勝つため、値を選ばせても効かない。
+    // 埋め込み拒否はこのヘッダだけで行う。CSP の frame-ancestors は
+    // default-src にフォールバックしない数少ないディレクティブなので、
+    // default-src 'none' があっても他サイトからの iframe は防げない。
+    // frame-ancestors を併記すると CSP3 §6.4.2.2 によりこちらが無視されるため、
+    // 送るのは片方だけにする。設定項目にはしない（全拒否以外の要求が無い）。
     xFrameOptions: "DENY",
     referrerPolicy: settings?.referrerPolicy,
   };

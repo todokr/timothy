@@ -14,7 +14,7 @@ const BASELINE =
   "sandbox allow-scripts allow-popups allow-downloads allow-modals; " +
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; " +
   "img-src data: blob:; font-src data:; connect-src 'none'; " +
-  "frame-ancestors 'none'; form-action 'none'; base-uri 'none'";
+  "form-action 'none'; base-uri 'none'";
 
 describe("validateOrigin", () => {
   it("正規形の https オリジンを通す", () => {
