@@ -28,6 +28,10 @@ import {
   tableClass,
   tableWrapClass,
   shareCellClass,
+  titleCellClass,
+  titleTextClass,
+  descriptionTextClass,
+  dateCellClass,
   formClass,
   dropZoneClass,
   submitButtonClass,
@@ -105,7 +109,6 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
         <thead>
           <tr>
             <th>タイトル</th>
-            <th>説明</th>
             <th>共有</th>
             <th>有効期限</th>
             <th>作成日時</th>
@@ -115,8 +118,19 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
         <tbody>
           {props.files.map((file) => (
             <tr key={file.id}>
-              <td>{file.title}</td>
-              <td>{file.description}</td>
+              {/*
+                説明はタイトルに従属する情報なので、独立した列を与えず下に積む。
+                空のときは要素ごと出さない — 空の span が残ると margin の分だけ
+                行の高さが揺れる。
+              */}
+              <td class={titleCellClass}>
+                <span class={titleTextClass}>{file.title}</span>
+                {file.description ? (
+                  <span class={descriptionTextClass} title={file.description}>
+                    {file.description}
+                  </span>
+                ) : null}
+              </td>
               <td>
                 <div class={shareCellClass}>
                   <a
@@ -132,8 +146,10 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
                   </button>
                 </div>
               </td>
-              <td>{file.expiresAt === null ? "無期限" : formatJst(file.expiresAt)}</td>
-              <td>{formatJst(file.createdAt)}</td>
+              <td class={dateCellClass}>
+                {file.expiresAt === null ? "無期限" : formatJst(file.expiresAt)}
+              </td>
+              <td class={dateCellClass}>{formatJst(file.createdAt)}</td>
               <td>
                 {/*
                   エラー表示もこの flex 行に入れる。外に出すとブロック要素の下に

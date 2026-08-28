@@ -87,6 +87,26 @@ describe("GET /", () => {
     expect(html).not.toContain("まだファイルがありません");
   });
 
+  // 説明はタイトルに従属する情報なので、独立した列を持たずタイトルの下に入る。
+  it("renders the description inside the title cell instead of its own column", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry()]);
+    const html = await (await app.request("/")).text();
+
+    expect(html).not.toContain("<th>説明</th>");
+
+    const titleCell = html.slice(html.indexOf("Monthly Report"));
+    expect(titleCell.slice(0, titleCell.indexOf("</td>"))).toContain("Details");
+  });
+
+  // 空の要素が残ると margin の分だけ行の高さが揺れる。
+  it("omits the description element when there is no description", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry({ description: "" })]);
+    const html = await (await app.request("/")).text();
+
+    const titleCell = html.slice(html.indexOf("Monthly Report"));
+    expect(titleCell.slice(0, titleCell.indexOf("</td>"))).not.toContain("<span");
+  });
+
   it("formats timestamps in Asia/Tokyo", async () => {
     vi.mocked(listFiles).mockResolvedValue([entry()]);
     const html = await (await app.request("/")).text();

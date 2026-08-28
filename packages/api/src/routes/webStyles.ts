@@ -125,19 +125,52 @@ export const tableClass = css`
     background: var(--gray-25);
   }
 
-  /* 説明は長くなりうるので、この列だけ折り返しを許す。 */
-  td:nth-child(2) {
-    white-space: normal;
-    min-width: 12rem;
-    color: var(--gray-700);
-  }
+`;
 
-  /* 有効期限と作成日時。桁を揃える。 */
-  td:nth-child(4),
-  td:nth-child(5) {
-    font-variant-numeric: tabular-nums;
-    color: var(--gray-700);
-  }
+/*
+ * 列の指定は nth-child ではなくクラスで行う。位置で指定すると、列を足したり
+ * 減らしたりするたびに無関係な列へスタイルが移る。
+ */
+
+/** タイトルと説明を縦に積むセル。 */
+export const titleCellClass = css`
+  max-width: 22rem;
+`;
+
+/*
+ * タイトルは折り返さず 1 行で省略する。長さで行の高さが変わると、
+ * 一覧としての走査性が落ちる。
+ */
+export const titleTextClass = css`
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+`;
+
+/*
+ * 全文は title 属性のツールチップで読める。
+ *
+ * white-space はここで指定する。tableClass の `td { white-space: nowrap }` は
+ * セルに付けたクラスより詳細度が高く、td 側では上書きできない。折り返しが
+ * 効かないと line-clamp も働かず、省略記号なしで 1 行に切れる。
+ */
+export const descriptionTextClass = css`
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  margin-top: var(--space-1);
+  font-size: 0.75rem;
+  color: var(--gray-500);
+`;
+
+/** 有効期限と作成日時。桁を揃える。 */
+export const dateCellClass = css`
+  font-variant-numeric: tabular-nums;
+  color: var(--gray-700);
 `;
 
 export const shareCellClass = css`
