@@ -11,7 +11,8 @@ const HTML_FILES_COLLECTION = "htmlFiles";
 type UploadInput = {
   title: string;
   description: string;
-  ttlDays: number;
+  /** null は無期限。有効期限を設けない。 */
+  ttlDays: number | null;
 };
 
 type ParseResult = { ok: true; data: UploadInput } | { ok: false; error: string };
@@ -35,8 +36,13 @@ export function parseUploadRequest(body: unknown): ParseResult {
   if (typeof description !== "string") {
     return { ok: false, error: "description must be a string" };
   }
+  // null は無期限。キーの欠落（上で 400）とは区別する — 欠落は指定漏れであり、
+  // 無期限は明示的な選択なので、同じ扱いにすると事故で期限なしになりうる。
+  if (ttlDays === null) {
+    return { ok: true, data: { title, description, ttlDays: null } };
+  }
   if (typeof ttlDays !== "number" || !Number.isInteger(ttlDays) || ttlDays <= 0) {
-    return { ok: false, error: "ttlDays must be a positive integer" };
+    return { ok: false, error: "ttlDays must be a positive integer or null" };
   }
 
   return { ok: true, data: { title, description, ttlDays } };
@@ -64,7 +70,7 @@ app.post("/", async (c) => {
 
   const id = ulid();
   const storagePath = `${STORAGE_BASE_PATH}/${id}.html`;
-  const expiresAt = addSeconds(now(), ttlDays * 24 * 60 * 60);
+  const expiresAt = ttlDays === null ? null : addSeconds(now(), ttlDays * 24 * 60 * 60);
 
   const uploadUrl = await generateSignedUploadUrl(storagePath);
 
@@ -85,7 +91,7 @@ app.post("/", async (c) => {
     uploadUrl,
     uploadHeaders: { "Content-Type": UPLOAD_CONTENT_TYPE },
     url,
-    expiresAt: expiresAt.toISOString(),
+    expiresAt: expiresAt?.toISOString() ?? null,
   });
 });
 

@@ -280,25 +280,38 @@ export type BuiltHeaders = {
 };
 
 /**
+ * 無期限のとき max-age に入れる秒数。
+ *
+ * 期限切れ後の配信という問題は無期限には無いが、max-age を省くとブラウザや
+ * 中間キャッシュがヒューリスティックに期間を決めてしまう。削除した後に古い
+ * キャッシュから配信され続ける窓を読める長さに抑えるための固定値。
+ */
+const INDEFINITE_MAX_AGE_SECONDS = 24 * 60 * 60;
+
+/**
  * `public` は共有キャッシュに残るため、有効期限までの残り秒数を max-age に入れる。
  * これが無いとブラウザや中間キャッシュがヒューリスティックに期間を決め、
  * TTL 経過後もキャッシュから配信され続けうる。
  */
 function cacheControlValue(
   value: ResponseHeaderSettings["cacheControl"],
-  expiresAt: Date,
+  expiresAt: Date | null,
   nowMs: number
 ): string | undefined {
   if (!value) return undefined;
   if (value === "no-store") return "no-store";
 
-  const maxAge = Math.max(0, Math.floor((expiresAt.getTime() - nowMs) / 1000));
+  const maxAge =
+    expiresAt === null
+      ? INDEFINITE_MAX_AGE_SECONDS
+      : Math.max(0, Math.floor((expiresAt.getTime() - nowMs) / 1000));
   return `${value}, max-age=${maxAge}`;
 }
 
+/** expiresAt が null のときは無期限。 */
 export function buildHeaders(
   settings: ResponseHeaderSettings | undefined,
-  expiresAt: Date,
+  expiresAt: Date | null,
   nowMs: number = Date.now()
 ): BuiltHeaders {
   return {

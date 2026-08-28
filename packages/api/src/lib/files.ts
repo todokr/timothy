@@ -8,8 +8,8 @@ export type FileEntry = {
   title: string;
   description: string;
   url: string;
-  /** ISO 8601 */
-  expiresAt: string;
+  /** ISO 8601。null は無期限。 */
+  expiresAt: string | null;
   /** ISO 8601 */
   createdAt: string;
 };
@@ -33,7 +33,7 @@ export async function listFiles(baseUrl: string): Promise<FileEntry[]> {
       title: data.title,
       description: data.description,
       url: `${baseUrl}/s/${doc.id}`,
-      expiresAt: data.expiresAt.toDate().toISOString(),
+      expiresAt: data.expiresAt ? data.expiresAt.toDate().toISOString() : null,
       createdAt: data.createdAt.toDate().toISOString(),
     };
   });

@@ -183,6 +183,18 @@ export const formClass = css`
     max-width: 8rem;
   }
 
+  input[type="checkbox"] {
+    margin-right: var(--space-2);
+    accent-color: var(--accent);
+  }
+
+  /* 無期限を選んでいる間の日数入力。触れないことを見た目でも示す。 */
+  input[type="number"]:disabled {
+    color: var(--gray-400);
+    background: var(--gray-50);
+    cursor: not-allowed;
+  }
+
   input[type="text"]::placeholder {
     color: var(--gray-400);
   }

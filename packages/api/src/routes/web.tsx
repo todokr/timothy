@@ -58,7 +58,9 @@ export function formatJst(iso: string): string {
   return JST_FORMATTER.format(new Date(iso));
 }
 
-export function isExpired(iso: string, nowMs: number): boolean {
+/** null は無期限。Date.parse の NaN 比較に頼らず、明示的に期限なしと判定する。 */
+export function isExpired(iso: string | null, nowMs: number): boolean {
+  if (iso === null) return false;
   return Date.parse(iso) < nowMs;
 }
 
@@ -130,7 +132,7 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
                   </button>
                 </div>
               </td>
-              <td>{formatJst(file.expiresAt)}</td>
+              <td>{file.expiresAt === null ? "無期限" : formatJst(file.expiresAt)}</td>
               <td>{formatJst(file.createdAt)}</td>
               <td>
                 {/*
@@ -178,6 +180,14 @@ function UploadForm() {
       <label>
         有効期間（日）
         <input id="ttl-input" type="number" name="ttlDays" value="7" min="1" step="1" required />
+      </label>
+      {/*
+        チェック中は日数入力を disabled にして required を外す（webScript 側）。
+        「7 日と入力しつつ無期限」という矛盾した状態を UI で作れなくするため。
+      */}
+      <label>
+        <input id="no-expiry-input" type="checkbox" name="noExpiry" />
+        無期限にする
       </label>
       <button id="submit-button" type="submit" class={submitButtonClass}>
         アップロード

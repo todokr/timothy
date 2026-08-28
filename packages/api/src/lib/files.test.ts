@@ -79,6 +79,24 @@ describe("listFiles", () => {
     ]);
   });
 
+  it("maps a document stored with no expiry to expiresAt: null", async () => {
+    mockSnapshot([
+      {
+        id: "01ABC",
+        data: {
+          title: "Handbook",
+          description: "",
+          expiresAt: null,
+          createdAt: { toDate: () => new Date("2026-08-07T00:00:00.000Z") },
+        },
+      },
+    ]);
+
+    const files = await listFiles("https://api.example.com");
+
+    expect(files[0].expiresAt).toBeNull();
+  });
+
   it("queries the htmlFiles collection ordered by createdAt descending", async () => {
     const { orderByMock } = mockSnapshot([]);
     await listFiles("http://localhost");

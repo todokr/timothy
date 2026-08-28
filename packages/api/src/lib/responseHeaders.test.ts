@@ -184,6 +184,21 @@ describe("buildHeaders", () => {
     );
   });
 
+  // 無期限には残り秒数が無い。max-age を省くとキャッシュ期間がヒューリスティックに
+  // 決まり、削除後の残留期間が読めなくなるので固定値を入れる。
+  it("無期限のとき public / private に max-age=86400 を付ける", () => {
+    expect(buildHeaders({ cacheControl: "public" }, null, nowMs).cacheControl).toBe(
+      "public, max-age=86400"
+    );
+    expect(buildHeaders({ cacheControl: "private" }, null, nowMs).cacheControl).toBe(
+      "private, max-age=86400"
+    );
+  });
+
+  it("無期限でも no-store には max-age を付けない", () => {
+    expect(buildHeaders({ cacheControl: "no-store" }, null, nowMs).cacheControl).toBe("no-store");
+  });
+
   it("期限切れでも max-age が負にならない", () => {
     const past = new Date("2025-01-01T00:00:00Z");
     expect(buildHeaders({ cacheControl: "public" }, past, nowMs).cacheControl).toBe(

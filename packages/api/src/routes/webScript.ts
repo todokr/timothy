@@ -15,6 +15,7 @@ export const CLIENT_SCRIPT = `
   var titleInput = document.getElementById("title-input");
   var descriptionInput = document.getElementById("description-input");
   var ttlInput = document.getElementById("ttl-input");
+  var noExpiryInput = document.getElementById("no-expiry-input");
   var submitButton = document.getElementById("submit-button");
   var dropZone = document.getElementById("drop-zone");
   var errorBox = document.getElementById("form-error");
@@ -74,6 +75,13 @@ export const CLIENT_SCRIPT = `
     if (file) fillTitleIfEmpty(file);
   });
 
+  // 無期限を選んでいる間は日数入力を触れなくする。required も外さないと、
+  // disabled でない限りブラウザの検証が空欄で止めてしまう。
+  noExpiryInput.addEventListener("change", function () {
+    ttlInput.disabled = noExpiryInput.checked;
+    ttlInput.required = !noExpiryInput.checked;
+  });
+
   form.addEventListener("submit", async function (e) {
     e.preventDefault();
     clearError();
@@ -100,7 +108,7 @@ export const CLIENT_SCRIPT = `
         body: JSON.stringify({
           title: titleInput.value,
           description: descriptionInput.value,
-          ttlDays: Number(ttlInput.value),
+          ttlDays: noExpiryInput.checked ? null : Number(ttlInput.value),
         }),
       });
 
