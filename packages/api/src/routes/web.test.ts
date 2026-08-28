@@ -47,6 +47,11 @@ describe("isExpired", () => {
   it("returns true for a past timestamp", () => {
     expect(isExpired("2026-08-06T00:00:00.000Z", nowMs)).toBe(true);
   });
+
+  // null は無期限。一覧から落としてはいけない。
+  it("returns false for null", () => {
+    expect(isExpired(null, nowMs)).toBe(false);
+  });
 });
 
 describe("GET /", () => {
@@ -82,6 +87,26 @@ describe("GET /", () => {
     expect(html).not.toContain("まだファイルがありません");
   });
 
+  // 説明はタイトルに従属する情報なので、独立した列を持たずタイトルの下に入る。
+  it("renders the description inside the title cell instead of its own column", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry()]);
+    const html = await (await app.request("/")).text();
+
+    expect(html).not.toContain("<th>説明</th>");
+
+    const titleCell = html.slice(html.indexOf("Monthly Report"));
+    expect(titleCell.slice(0, titleCell.indexOf("</td>"))).toContain("Details");
+  });
+
+  // 空の要素が残ると margin の分だけ行の高さが揺れる。
+  it("omits the description element when there is no description", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry({ description: "" })]);
+    const html = await (await app.request("/")).text();
+
+    const titleCell = html.slice(html.indexOf("Monthly Report"));
+    expect(titleCell.slice(0, titleCell.indexOf("</td>"))).not.toContain("<span");
+  });
+
   it("formats timestamps in Asia/Tokyo", async () => {
     vi.mocked(listFiles).mockResolvedValue([entry()]);
     const html = await (await app.request("/")).text();
@@ -95,6 +120,16 @@ describe("GET /", () => {
     const html = await (await app.request("/")).text();
     expect(html).not.toContain("Expired Report");
     expect(html).not.toContain('data-delete-id="01OLD"');
+  });
+
+  it("renders 無期限 for a file with no expiry and keeps it listed", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "01FOREVER", title: "Handbook", expiresAt: null }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("Handbook");
+    expect(html).toContain('data-delete-id="01FOREVER"');
+    expect(html).toContain("無期限");
   });
 
   it("keeps live files and drops only the expired ones", async () => {
@@ -150,6 +185,7 @@ describe("GET /", () => {
     expect(html).toContain('id="title-input"');
     expect(html).toContain('id="description-input"');
     expect(html).toContain('id="ttl-input"');
+    expect(html).toContain('id="no-expiry-input"');
     expect(html).toContain('id="submit-button"');
     expect(html).toContain('id="form-error"');
   });
@@ -273,6 +309,25 @@ describe("CLIENT_SCRIPT", () => {
     expect(putFailure).toContain("ファイル情報だけが登録されている場合があります");
     expect(putFailure).toContain("再読み込み");
     expect(putFailure).toMatch(/setTimeout\(function \(\) \{ location\.reload\(\); \}, \d+\)/);
+  });
+
+  // null がそのまま無期限を意味する。Number("") が 0 になり 400 で弾かれる形や、
+  // 日数がそのまま送られて無期限にならない形を防ぐ。
+  it("sends ttlDays: null when the no-expiry checkbox is checked", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    const payload = CLIENT_SCRIPT.slice(
+      CLIENT_SCRIPT.indexOf("body: JSON.stringify({"),
+      CLIENT_SCRIPT.indexOf("if (!res.ok)")
+    );
+    expect(payload).toContain("noExpiryInput.checked ? null : Number(ttlInput.value)");
+  });
+
+  // 「7 日と入力しつつ無期限」という矛盾した状態を UI 側で作れなくする。
+  it("disables the day input while the no-expiry checkbox is checked", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    expect(CLIENT_SCRIPT).toContain('noExpiryInput.addEventListener("change"');
+    expect(CLIENT_SCRIPT).toContain("ttlInput.disabled = noExpiryInput.checked");
+    expect(CLIENT_SCRIPT).toContain("ttlInput.required = !noExpiryInput.checked");
   });
 });
 

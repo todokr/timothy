@@ -150,4 +150,12 @@ describe("GET /s/:id", () => {
     mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: past() }) });
     expect((await app.request("/01ABC")).status).toBe(410);
   });
+
+  // expiresAt: null は無期限。期限判定そのものを行わない。
+  it("serves a file stored with no expiry", async () => {
+    mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: null }) });
+    const res = await app.request("/01ABC");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<h1>report</h1>");
+  });
 });

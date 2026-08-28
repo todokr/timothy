@@ -28,6 +28,10 @@ import {
   tableClass,
   tableWrapClass,
   shareCellClass,
+  titleCellClass,
+  titleTextClass,
+  descriptionTextClass,
+  dateCellClass,
   formClass,
   dropZoneClass,
   submitButtonClass,
@@ -58,7 +62,9 @@ export function formatJst(iso: string): string {
   return JST_FORMATTER.format(new Date(iso));
 }
 
-export function isExpired(iso: string, nowMs: number): boolean {
+/** null は無期限。Date.parse の NaN 比較に頼らず、明示的に期限なしと判定する。 */
+export function isExpired(iso: string | null, nowMs: number): boolean {
+  if (iso === null) return false;
   return Date.parse(iso) < nowMs;
 }
 
@@ -103,7 +109,6 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
         <thead>
           <tr>
             <th>タイトル</th>
-            <th>説明</th>
             <th>共有</th>
             <th>有効期限</th>
             <th>作成日時</th>
@@ -113,8 +118,19 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
         <tbody>
           {props.files.map((file) => (
             <tr key={file.id}>
-              <td>{file.title}</td>
-              <td>{file.description}</td>
+              {/*
+                説明はタイトルに従属する情報なので、独立した列を与えず下に積む。
+                空のときは要素ごと出さない — 空の span が残ると margin の分だけ
+                行の高さが揺れる。
+              */}
+              <td class={titleCellClass}>
+                <span class={titleTextClass}>{file.title}</span>
+                {file.description ? (
+                  <span class={descriptionTextClass} title={file.description}>
+                    {file.description}
+                  </span>
+                ) : null}
+              </td>
               <td>
                 <div class={shareCellClass}>
                   <a
@@ -130,8 +146,10 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
                   </button>
                 </div>
               </td>
-              <td>{formatJst(file.expiresAt)}</td>
-              <td>{formatJst(file.createdAt)}</td>
+              <td class={dateCellClass}>
+                {file.expiresAt === null ? "無期限" : formatJst(file.expiresAt)}
+              </td>
+              <td class={dateCellClass}>{formatJst(file.createdAt)}</td>
               <td>
                 {/*
                   エラー表示もこの flex 行に入れる。外に出すとブロック要素の下に
@@ -178,6 +196,14 @@ function UploadForm() {
       <label>
         有効期間（日）
         <input id="ttl-input" type="number" name="ttlDays" value="7" min="1" step="1" required />
+      </label>
+      {/*
+        チェック中は日数入力を disabled にして required を外す（webScript 側）。
+        「7 日と入力しつつ無期限」という矛盾した状態を UI で作れなくするため。
+      */}
+      <label>
+        <input id="no-expiry-input" type="checkbox" name="noExpiry" />
+        無期限にする
       </label>
       <button id="submit-button" type="submit" class={submitButtonClass}>
         アップロード

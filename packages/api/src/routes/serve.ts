@@ -14,8 +14,9 @@ app.get("/:id", async (c) => {
   if (!doc.exists) return c.json({ error: "Not Found" }, 404);
 
   const data = doc.data()!;
-  const expiresAt: Date = data.expiresAt.toDate();
-  if (expiresAt < new Date()) return c.json({ error: "Gone" }, 410);
+  // expiresAt が null なら無期限。期限判定そのものを行わない。
+  const expiresAt: Date | null = data.expiresAt ? data.expiresAt.toDate() : null;
+  if (expiresAt !== null && expiresAt < new Date()) return c.json({ error: "Gone" }, 410);
 
   const html = await getFileContent(data.storagePath);
 

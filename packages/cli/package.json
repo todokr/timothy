@@ -21,6 +21,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "test": "vitest run",
     "bundle": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/tim.mjs --minify --banner:js=\"import{createRequire as __cr}from'module';const require=__cr(import.meta.url);\" && chmod +x dist/tim.mjs",
     "prepublishOnly": "pnpm run build"
   },
@@ -31,6 +32,7 @@
     "@types/node": "^25.8.0",
     "esbuild": "^0.28.0",
     "tsx": "^4.22.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
   }
 }

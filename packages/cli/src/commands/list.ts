@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { apiList } from "../lib/api.js";
 import { readConfig } from "../lib/config.js";
+import { formatExpiry } from "../lib/expiry.js";
 
 export const listCommand = new Command("list")
   .description("List uploaded files")
@@ -24,7 +25,7 @@ export const listCommand = new Command("list")
     process.stdout.write(`${header}\n`);
     for (const f of files) {
       const created = f.createdAt.slice(0, 10);
-      const expires = f.expiresAt.slice(0, 10);
+      const expires = formatExpiry(f.expiresAt);
       const title = f.title.length > titleW - 2 ? `${f.title.slice(0, titleW - 3)}…` : f.title;
       const row = `${f.url.padEnd(urlW)}${title.padEnd(titleW)}${created.padEnd(dateW)}${expires}`;
       process.stdout.write(`${row}\n`);

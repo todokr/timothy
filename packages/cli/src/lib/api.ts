@@ -3,7 +3,8 @@ import type { Config } from "./config.js";
 export type UploadPayload = {
   title: string;
   description: string;
-  ttlDays: number;
+  /** null は無期限。 */
+  ttlDays: number | null;
 };
 
 export type UploadInitResponse = {
@@ -11,13 +12,15 @@ export type UploadInitResponse = {
   uploadUrl: string;
   uploadHeaders: Record<string, string>;
   url: string;
-  expiresAt: string;
+  /** ISO 8601。null は無期限。 */
+  expiresAt: string | null;
 };
 
 export type UploadResponse = {
   id: string;
   url: string;
-  expiresAt: string;
+  /** ISO 8601。null は無期限。 */
+  expiresAt: string | null;
 };
 
 export type FileEntry = {
@@ -25,7 +28,8 @@ export type FileEntry = {
   title: string;
   url: string;
   createdAt: string;
-  expiresAt: string;
+  /** ISO 8601。null は無期限。 */
+  expiresAt: string | null;
 };
 
 const jsonHeaders: Record<string, string> = {
