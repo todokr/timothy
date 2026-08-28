@@ -38,6 +38,9 @@ tim upload report.html
 # Upload with a custom title and TTL (days)
 tim upload report.html --title "Monthly Report" --ttl 30
 
+# Upload with no expiry
+tim upload report.html --ttl never
+
 # Pipe from stdin
 llm generate report | tim upload --stdin --title "Generated Report"
 ```
