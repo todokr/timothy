@@ -50,6 +50,10 @@ describe("IP allowlist coverage", () => {
     expect((await request("/files/reindex", "POST")).status).toBe(403);
   });
 
+  it("blocks the search endpoint", async () => {
+    expect((await request("/search?q=x")).status).toBe(403);
+  });
+
   it("blocks the share endpoint", async () => {
     expect((await request("/s/01ABC")).status).toBe(403);
   });

@@ -542,3 +542,117 @@ export const fieldNoteClass = css`
   font-weight: 400;
   color: var(--gray-500);
 `;
+export const searchFormClass = css`
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-5);
+
+  input[type="search"] {
+    flex: 1;
+    min-width: 0;
+    height: 2.25rem;
+    padding: 0 var(--space-3);
+    font: inherit;
+    color: var(--gray-900);
+    background: var(--gray-0);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+  }
+
+  input[type="search"]:focus-visible {
+    border-color: var(--accent);
+    outline: 2px solid var(--accent-soft);
+    outline-offset: 0;
+  }
+`;
+
+export const searchSummaryClass = css`
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-4);
+  font-size: 0.8125rem;
+  color: var(--gray-500);
+`;
+
+export const searchResultsClass = css`
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+`;
+
+export const searchResultClass = css`
+  padding: var(--space-4);
+  background: var(--gray-0);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+
+  h2 {
+    margin: 0 0 var(--space-1);
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  h2 a {
+    color: var(--gray-900);
+    text-decoration: none;
+  }
+
+  h2 a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+
+  .meta {
+    margin: 0 0 var(--space-3);
+    font-size: 0.75rem;
+    color: var(--gray-500);
+  }
+
+  .actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+  }
+`;
+
+export const snippetClass = css`
+  margin: 0 0 var(--space-2);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--gray-700);
+  word-break: break-word;
+
+  &:last-of-type {
+    margin-bottom: 0;
+  }
+
+  mark {
+    padding: 0 2px;
+    color: var(--gray-900);
+    background: var(--accent-soft);
+    border-radius: 2px;
+  }
+`;
+
+export const pendingNoticeClass = css`
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.8125rem;
+  color: var(--gray-700);
+  background: var(--accent-soft);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+
+  span[data-reindex-status] {
+    color: var(--gray-500);
+  }
+`;

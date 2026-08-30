@@ -6,6 +6,7 @@ vi.mock("../lib/files.js", async (importOriginal) => ({
   listFiles: vi.fn(),
   resolveBaseUrl: vi.fn().mockReturnValue("http://localhost"),
 }));
+vi.mock("../lib/search.js", () => ({ searchFiles: vi.fn() }));
 
 vi.mock("../lib/firebase.js", () => ({
   db: { collection: vi.fn() },
@@ -13,6 +14,7 @@ vi.mock("../lib/firebase.js", () => ({
 
 import { listFiles } from "../lib/files.js";
 import { db } from "../lib/firebase.js";
+import { searchFiles } from "../lib/search.js";
 import app, { formatJst, isExpired } from "./web.js";
 
 function entry(overrides: Record<string, unknown> = {}) {
@@ -291,7 +293,162 @@ describe("GET /", () => {
 
 });
 
+function hit(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "01ABC",
+    title: "Monthly Report",
+    description: "Details",
+    url: "http://localhost/s/01ABC",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    createdAt: "2026-08-07T03:04:00.000Z",
+    score: 3,
+    snippets: [{ before: "sales ", match: "grew", after: " last month" }],
+    ...overrides,
+  };
+}
+
+describe("GET / with a search query", () => {
+  beforeEach(() => {
+    vi.mocked(searchFiles).mockReset();
+    vi.mocked(listFiles).mockReset();
+  });
+
+  it("renders the search box on the plain listing page", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain('type="search"');
+    expect(html).toContain('name="q"');
+    // クエリが無いときは検索しない。
+    expect(searchFiles).not.toHaveBeenCalled();
+  });
+
+  it("renders hits with the matched text wrapped in mark", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "grew",
+      hits: [hit()],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=grew")).text();
+
+    expect(searchFiles).toHaveBeenCalledWith("grew", "http://localhost");
+    expect(html).toContain("<mark>grew</mark>");
+    expect(html).toContain("Monthly Report");
+    expect(html).toContain("検索結果 1 件");
+  });
+
+  it("trims the query before searching", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "grew",
+      hits: [],
+      pendingCount: 0,
+    } as never);
+    await app.request("/?q=%20grew%20");
+    expect(vi.mocked(searchFiles).mock.calls[0][0]).toBe("grew");
+  });
+
+  // スニペットはアップロードされた HTML から取り出したテキストなので、
+  // 管理画面から見れば敵性の入力。raw() や dangerouslySetInnerHTML で
+  // 組み立てると serve.ts の sandbox CSP が守っている境界を自分で壊す。
+  it("escapes HTML inside a snippet instead of rendering it", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "script",
+      hits: [
+        hit({
+          title: "<img src=x onerror=alert(1)>",
+          snippets: [
+            { before: "<script>alert(1)</script>", match: "script", after: "</p>" },
+          ],
+        }),
+      ],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=script")).text();
+
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).not.toContain("<img src=x onerror=alert(1)>");
+    // ハイライト自体は生きていること。
+    expect(html).toContain("<mark>script</mark>");
+  });
+
+  it("shows a distinct empty state naming the query", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "missing",
+      hits: [],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=missing")).text();
+    expect(html).toContain("「missing」に一致するファイルはありません");
+    expect(html).not.toContain("まだファイルがありません");
+  });
+
+  it("offers the reindex button when files are not indexed yet", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "q",
+      hits: [],
+      pendingCount: 3,
+    } as never);
+
+    const html = await (await app.request("/?q=q")).text();
+    expect(html).toContain("未インデックス 3 件");
+    expect(html).toContain("data-reindex");
+  });
+
+  it("hides the reindex notice when nothing is pending", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "q",
+      hits: [],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=q")).text();
+    expect(html).not.toContain("未インデックス");
+  });
+
+  // CLIENT_SCRIPT はアップロードフォームの要素を前提に初期化するので、
+  // 検索結果ページから外すと削除・コピー・再インデックスのハンドラごと死ぬ。
+  it("still renders the upload form so the client script can initialise", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "q",
+      hits: [],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=q")).text();
+    expect(html).toContain('id="upload-form"');
+    expect(html).toContain('id="drop-zone"');
+    expect(html).toContain('id="submit-button"');
+  });
+
+  it("keeps the search box on the error page", async () => {
+    vi.mocked(searchFiles).mockRejectedValue(new Error("boom"));
+    const res = await app.request("/?q=q");
+    expect(res.status).toBe(500);
+    expect(await res.text()).toContain('name="q"');
+  });
+});
+
 describe("CLIENT_SCRIPT", () => {
+  // 一覧では tr、検索結果では article が行にあたるため、両方を拾う必要がある。
+  it("finds the row for a delete button in both the table and the search results", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    expect(CLIENT_SCRIPT).toContain('closest("tr, article")');
+  });
+
+  it("loops the reindex call until nothing remains", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    expect(CLIENT_SCRIPT).toContain('fetch("/files/reindex"');
+    expect(CLIENT_SCRIPT).toContain("body.remaining === 0");
+  });
+
+  it("indexes the file contents after a successful upload", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    expect(CLIENT_SCRIPT).toContain('"/files/" + encodeURIComponent(issued.id) + "/index"');
+  });
+
   it("does not contain a closing script tag that would break embedding", async () => {
     const { CLIENT_SCRIPT } = await import("./webScript.js");
     expect(CLIENT_SCRIPT).not.toContain("</script>");
