@@ -13,6 +13,7 @@
   "dependencies": {
     "@google-cloud/storage": "^7.19.0",
     "@hono/node-server": "^2.0.2",
+    "@huggingface/transformers": "^4.2.0",
     "firebase-admin": "^13.10.0",
     "hono": "^4.12.18",
     "pino": "^10.3.1",

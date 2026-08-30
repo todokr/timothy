@@ -9,6 +9,16 @@ RUN pnpm --filter @timothy/api build
 RUN pnpm deploy --filter @timothy/api --prod --legacy /build/deploy && \
     rm -rf /build/deploy/src /build/deploy/scripts
 
+# モデルの重みをイメージに焼き込む。コールドスタート時に huggingface.co を
+# 取りに行かせない（遅いうえ egress 制限のある環境で壊れる）。
+ENV EMBEDDING_CACHE_DIR=/model-cache
+RUN cd /build/deploy && node --input-type=module -e "\
+import {env,pipeline} from '@huggingface/transformers';\
+env.cacheDir='/model-cache';\
+await pipeline('feature-extraction','hotchpotch/bekko-embedding-v1-a8m',{dtype:'fp32'});"
+
 FROM public.ecr.aws/lambda/nodejs:22
+ENV EMBEDDING_CACHE_DIR=/model-cache
+COPY --from=builder /model-cache /model-cache
 COPY --from=builder /build/deploy ${LAMBDA_TASK_ROOT}
 CMD ["dist/lambda.handler"]
