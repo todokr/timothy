@@ -2,3 +2,5 @@
 gcloud = "latest"
 node = "24"
 "npm:pnpm" = "latest"
+# Firestore / Storage エミュレータ (test:integration) が Java 21+ を要求する
+java = "temurin-21"
