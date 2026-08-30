@@ -110,6 +110,15 @@ tim search "タイムアウト" --json
 全角・半角は正規化して照合するので、`ＡＰＩ` で `API` にもヒットします。
 `<script>` や `<style>` の中身は検索対象に入りません。
 
+検索はキーワード一致と意味検索を併用します。本文に出てこない語でもヒットし、
+たとえば日本語で書かれたレポートを `revenue growth` のような英語のクエリで引けます。
+`TIM-4821` のような識別子はキーワード側が確実に拾います。
+両者の順位は RRF で融合されます。
+
+埋め込みモデル（[bekko](https://huggingface.co/hotchpotch/bekko-embedding-v1-a8m), MIT）は
+APIプロセス内で動きます。**APIキーも従量課金も発生しません。**
+モデルを読み込めない場合はキーワード一致のみで応答します（検索が落ちることはありません）。
+
 本文の取り込みはアップロード時に自動で行われます。この機能より前に
 アップロードしたファイルや、取り込みに失敗したファイルは検索に出てこないので、
 その場合は Web UI に表示される「インデックスを作成」ボタンから取り込んでください。
@@ -249,6 +258,7 @@ Cloud Runにデプロイします（手順3で作成したサービスアカウ�
 gcloud run deploy timothy-api \
   --image ${IMAGE} \
   --region ${REGION} \
+  --memory 2Gi \
   --min-instances 0 \
   --max-instances 2 \
   --service-account ${SA} \
@@ -258,6 +268,16 @@ gcloud run deploy timothy-api \
 ```
 
 デプロイ後に表示されるサービスURLをメモしてください。
+
+**メモリとコールドスタートについて:**
+
+意味検索の埋め込みモデルをAPIプロセス内で動かすため、`--memory 2Gi` を指定しています
+（実測RSSは約620〜860MB）。`--min-instances 0` のままだと、コンテナが立ち上がってから
+最初の検索でモデルのロードに1〜2秒かかります。気になる場合は `--min-instances 1` に
+してください（常時課金が発生します）。
+
+モデルの重みはイメージに焼き込んであるため、起動時に外部へ取りに行くことはありません
+（イメージサイズは約850MB）。
 
 
 ### 5. （オプション）IPアドレス制限の設定
@@ -350,6 +370,14 @@ gcloud storage buckets update gs://YOUR_BUCKET --cors-file=cors.json
 ## AWSでのセルフホスティング（Lambda）
 
 APIはAWS Lambda上でも動作します。Firebaseバックエンド（Firestore + Cloud Storage）はそのまま使用し、コンピュート層のみをAWSに置き換えます。Cloud Run版との**コードの差異はありません**。
+
+ただし**パッケージングは対称ではありません**:
+
+- Cloud Runのイメージは `node:22-slim` を使います。`onnxruntime-node`（埋め込みモデルの実行）の
+  プリビルドバイナリがglibcリンクのため、alpine（musl）ではロードに失敗します。
+  Lambdaのベースイメージ（Amazon Linux）はglibcなので変更は不要です。
+- Lambdaは既にコンテナイメージでデプロイするため、zipの250MB制限は適用されません（上限10GB）。
+- メモリは**1024MB以上**（既定の128MBでは起動しません）。2048MBを推奨します。
 
 ## ライセンス
 
