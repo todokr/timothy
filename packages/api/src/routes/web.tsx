@@ -55,6 +55,8 @@ import {
   searchResultClass,
   snippetClass,
   pendingNoticeClass,
+  semanticSnippetClass,
+  noticeClass,
 } from "./webStyles.js";
 
 const JST_FORMATTER = new Intl.DateTimeFormat("sv-SE", {
@@ -228,7 +230,11 @@ function SnippetText(props: { snippet: SearchHit["snippets"][number] }) {
   );
 }
 
-function SearchResults(props: { query: string; hits: SearchHit[] }) {
+function SearchResults(props: {
+  query: string;
+  hits: SearchHit[];
+  keywordOnly: boolean;
+}) {
   if (props.hits.length === 0) {
     return (
       <div class={emptyClass}>
@@ -242,6 +248,11 @@ function SearchResults(props: { query: string; hits: SearchHit[] }) {
       <p class={searchSummaryClass}>
         <span>「{props.query}」の検索結果 {props.hits.length} 件</span>
       </p>
+      {props.keywordOnly ? (
+        <p class={noticeClass}>
+          意味検索は利用できません。キーワード一致のみの結果です。
+        </p>
+      ) : null}
       <div class={searchResultsClass}>
         {props.hits.map((hit) => (
           <article class={searchResultClass} key={hit.id}>
@@ -258,6 +269,9 @@ function SearchResults(props: { query: string; hits: SearchHit[] }) {
             {hit.snippets.map((snippet, i) => (
               <SnippetText snippet={snippet} key={i} />
             ))}
+            {hit.snippets.length === 0 && hit.semanticSnippet !== null ? (
+              <p class={semanticSnippetClass}>{hit.semanticSnippet}</p>
+            ) : null}
             <div class="actions">
               <button type="button" class={ghostButtonClass} data-copy-url={hit.url}>
                 URL をコピー
@@ -348,7 +362,11 @@ app.get("/", async (c) => {
         {/* CLIENT_SCRIPT がこのフォームの要素を前提に初期化するため、
             外すと削除・コピーのハンドラごと死ぬ。 */}
         <UploadForm />
-        <SearchResults query={query} hits={search.hits} />
+        <SearchResults
+          query={query}
+          hits={search.hits}
+          keywordOnly={search.keywordOnly}
+        />
       </Layout>
     );
   }

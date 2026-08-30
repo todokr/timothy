@@ -20,6 +20,8 @@ vi.mock("./lib/firebase.js", () => {
     const key = `${collection}/${id}`;
     return {
       id,
+      path: key,
+      ref: { path: key },
       get: () =>
         Promise.resolve({
           id,
@@ -42,6 +44,21 @@ vi.mock("./lib/firebase.js", () => {
     db: {
       collection: (name: string) => ({
         doc: (id: string) => docRef(name, id),
+        where: (field: string, _op: string, value: unknown) => ({
+          get: () =>
+            Promise.resolve({
+              docs: [...store.entries()]
+                .filter(
+                  ([key, data]) =>
+                    key.startsWith(`${name}/`) && data[field] === value,
+                )
+                .map(([key, data]) => ({
+                  id: key.slice(name.length + 1),
+                  ref: { path: key },
+                  data: () => data,
+                })),
+            }),
+        }),
         orderBy: (field: string, dir: string) => ({
           get: () =>
             Promise.resolve({
@@ -62,6 +79,21 @@ vi.mock("./lib/firebase.js", () => {
       }),
       getAll: (...refs: Array<{ get: () => Promise<unknown> }>) =>
         Promise.all(refs.map((ref) => ref.get())),
+      batch: () => {
+        const ops: Array<() => void> = [];
+        return {
+          set: (ref: { path: string }, data: Record<string, unknown>) => {
+            ops.push(() => store.set(ref.path, data));
+          },
+          delete: (ref: { path: string }) => {
+            ops.push(() => store.delete(ref.path));
+          },
+          commit: () => {
+            ops.forEach((op) => op());
+            return Promise.resolve();
+          },
+        };
+      },
     },
   };
 });
@@ -84,6 +116,14 @@ vi.mock("./lib/storage.js", () => ({
   },
   getBucket: () => ({}),
   UPLOAD_CONTENT_TYPE: "text/html; charset=utf-8",
+}));
+
+// モデルのロードを避ける。ベクトル側は integration テストで実物を通す。
+vi.mock("./lib/embeddings.js", () => ({
+  embed: () => Promise.resolve(null),
+  embedOne: () => Promise.resolve(null),
+  EMBEDDING_MODEL: "test-model",
+  EMBEDDING_DIM: 384,
 }));
 
 import app from "./index.js";

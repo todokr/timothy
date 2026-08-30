@@ -656,3 +656,23 @@ export const pendingNoticeClass = css`
     color: var(--gray-500);
   }
 `;
+
+export const semanticSnippetClass = css`
+  margin: 0 0 var(--space-2);
+  padding-left: var(--space-3);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--gray-500);
+  border-left: 2px solid var(--gray-300);
+  word-break: break-word;
+`;
+
+export const noticeClass = css`
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.8125rem;
+  color: var(--gray-700);
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+`;

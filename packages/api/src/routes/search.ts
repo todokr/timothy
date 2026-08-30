@@ -26,6 +26,7 @@ app.get("/", async (c) => {
     query: q,
     total: result.hits.length,
     pendingCount: result.pendingCount,
+    keywordOnly: result.keywordOnly,
     results: result.hits.map((hit) => ({
       id: hit.id,
       title: hit.title,
@@ -35,6 +36,7 @@ app.get("/", async (c) => {
       createdAt: hit.createdAt,
       score: hit.score,
       snippets: hit.snippets,
+      semanticSnippet: hit.semanticSnippet,
     })),
   });
 });

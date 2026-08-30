@@ -11,6 +11,9 @@ vi.mock("../lib/storage.js", () => ({
     "code" in error &&
     (error as { code: unknown }).code === 404,
 }));
+// 埋め込みはモデルのロードを伴うので、抽出の検証には持ち込まない。
+vi.mock("../lib/embeddings.js", () => ({ embed: vi.fn() }));
+vi.mock("../lib/vectorSearch.js", () => ({ writeChunks: vi.fn() }));
 vi.mock("../lib/files.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/files.js")>()),
   listFiles: vi.fn(),
@@ -20,6 +23,8 @@ import app from "./indexing.js";
 import { db } from "../lib/firebase.js";
 import { getFileContent } from "../lib/storage.js";
 import { listFiles } from "../lib/files.js";
+import { embed } from "../lib/embeddings.js";
+import { writeChunks } from "../lib/vectorSearch.js";
 import { HTML_FILE_TEXTS_COLLECTION } from "../lib/textIndex.js";
 import { CURRENT_EXTRACTOR_VERSION } from "../lib/htmlText.js";
 
@@ -70,6 +75,9 @@ describe("POST /:id/index", () => {
   beforeEach(() => {
     vi.mocked(db.collection).mockReset();
     vi.mocked(getFileContent).mockReset();
+    vi.mocked(embed).mockReset();
+    vi.mocked(writeChunks).mockReset();
+    vi.mocked(embed).mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -103,6 +111,7 @@ describe("POST /:id/index", () => {
     ]);
   });
 
+<<<<<<< HEAD
   // 無期限ファイルは expiresAt が null で保存される。Firestore の data は any なので
   // 型検査では捕まらず、toDate() を無条件に呼ぶと 500 になる。
   it("indexes a file stored with no expiry", async () => {
@@ -132,6 +141,37 @@ describe("POST /:id/index", () => {
     expect(res.status).toBe(200);
     // TTL ポリシーの対象外にするため null のまま複製する。
     expect(setMock.mock.calls[0][0].expiresAt).toBeNull();
+=======
+  it("stores a vector per chunk when the model is available", async () => {
+    mockCollections({
+      file: { storagePath: "timothy-files/01ABC.html", expiresAt: future() },
+    });
+    vi.mocked(getFileContent).mockResolvedValue("<p>本文</p>");
+    vi.mocked(embed).mockResolvedValue([[0.1, 0.2]]);
+
+    await app.request("/01ABC/index", { method: "POST" });
+
+    expect(writeChunks).toHaveBeenCalledWith(
+      "01ABC",
+      ["本文"],
+      [[0.1, 0.2]],
+      expect.any(Date),
+    );
+  });
+
+  it("still reports success when the model is unavailable", async () => {
+    mockCollections({
+      file: { storagePath: "timothy-files/01ABC.html", expiresAt: future() },
+    });
+    vi.mocked(getFileContent).mockResolvedValue("<p>本文</p>");
+    vi.mocked(embed).mockResolvedValue(null);
+
+    const res = await app.request("/01ABC/index", { method: "POST" });
+
+    // キーワード検索は成立するので、埋め込み失敗で取り込みを失敗扱いにしない。
+    expect(res.status).toBe(200);
+    expect(writeChunks).not.toHaveBeenCalled();
+>>>>>>> 9f54ab0 (feat(api): add semantic search and fuse it with keyword hits)
   });
 
   it("returns 404 when the file record does not exist", async () => {
@@ -177,6 +217,8 @@ describe("POST /reindex", () => {
     vi.mocked(db.getAll).mockReset();
     vi.mocked(getFileContent).mockReset();
     vi.mocked(listFiles).mockReset();
+    vi.mocked(embed).mockReset();
+    vi.mocked(embed).mockResolvedValue(null);
   });
 
   afterEach(() => {

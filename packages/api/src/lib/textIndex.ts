@@ -3,6 +3,9 @@ import { HTML_FILES_COLLECTION } from "./files.js";
 import { CURRENT_EXTRACTOR_VERSION, extractText } from "./htmlText.js";
 import { getFileContent, isNotFoundError } from "./storage.js";
 import { now } from "./time.js";
+import { chunkText } from "./chunk.js";
+import { embed } from "./embeddings.js";
+import { writeChunks } from "./vectorSearch.js";
 
 /**
  * 抽出済みテキストの置き場。サブコレクションにはしない。
@@ -38,15 +41,24 @@ export async function indexFile(id: string): Promise<IndexResult> {
     throw error;
   }
 
+  const text = extractText(html).text;
+
   await db
     .collection(HTML_FILE_TEXTS_COLLECTION)
     .doc(id)
     .set({
-      text: extractText(html).text,
+      text,
       extractorVersion: CURRENT_EXTRACTOR_VERSION,
       // TTL ポリシーで期限切れを自動削除させるため、親からコピーする。
       expiresAt,
     });
+
+  // 埋め込みに失敗してもキーワード検索は成立するので、取り込み自体は成功扱いにする。
+  const chunks = chunkText(text);
+  const vectors = chunks.length === 0 ? [] : await embed(chunks);
+  if (vectors !== null && vectors.length === chunks.length) {
+    await writeChunks(id, chunks, vectors, expiresAt);
+  }
 
   return { status: "indexed" };
 }

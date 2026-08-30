@@ -46,10 +46,26 @@
   //     ]
   //   },
   // ]
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "htmlFileChunks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "embedding",
+          "vectorConfig": { "dimension": 384, "flat": {} }
+        }
+      ]
+    }
+  ],
   "fieldOverrides": [
     {
       "collectionGroup": "htmlFileTexts",
+      "fieldPath": "text",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "htmlFileChunks",
       "fieldPath": "text",
       "indexes": []
     }

@@ -5,10 +5,12 @@ vi.mock("./files.js", async (importOriginal) => ({
   listFiles: vi.fn(),
 }));
 vi.mock("./textIndex.js", () => ({ loadTexts: vi.fn() }));
+vi.mock("./vectorSearch.js", () => ({ searchVectors: vi.fn() }));
 
 import { searchFiles } from "./search.js";
 import { listFiles } from "./files.js";
 import { loadTexts } from "./textIndex.js";
+import { searchVectors } from "./vectorSearch.js";
 
 function future(): string {
   return new Date(Date.now() + 86_400_000).toISOString();
@@ -37,6 +39,9 @@ describe("searchFiles", () => {
   beforeEach(() => {
     vi.mocked(listFiles).mockReset();
     vi.mocked(loadTexts).mockReset();
+    vi.mocked(searchVectors).mockReset();
+    // 既定はモデルが使えない状態。ベクトル側は個別のケースで差し込む。
+    vi.mocked(searchVectors).mockResolvedValue(null);
   });
 
   it("matches on the body text", async () => {
@@ -126,5 +131,90 @@ describe("searchFiles", () => {
 
     const result = await searchFiles("ＡＢＣ１２３", "http://localhost");
     expect(result.hits).toHaveLength(1);
+  });
+
+  it("reports keywordOnly when the model is unavailable", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry()]);
+    vi.mocked(loadTexts).mockResolvedValue(texts([["01ABC", "hit"]]));
+    vi.mocked(searchVectors).mockResolvedValue(null);
+
+    const result = await searchFiles("hit", "http://localhost");
+
+    expect(result.keywordOnly).toBe(true);
+    expect(result.hits).toHaveLength(1);
+  });
+
+  it("surfaces a file the keyword pass missed entirely", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "semantic", title: "無関係なタイトル" }),
+    ]);
+    vi.mocked(loadTexts).mockResolvedValue(texts([["semantic", "売上が伸びた"]]));
+    vi.mocked(searchVectors).mockResolvedValue([
+      { fileId: "semantic", text: "売上が伸びた", distance: 0.2 },
+    ]);
+
+    const result = await searchFiles("レベニュー", "http://localhost");
+
+    expect(result.hits.map((h) => h.id)).toEqual(["semantic"]);
+    expect(result.hits[0].semanticSnippet).toBe("売上が伸びた");
+    expect(result.keywordOnly).toBe(false);
+  });
+
+  it("sums the contribution of both passes for a file found by each", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry({ id: "both" })]);
+    vi.mocked(loadTexts).mockResolvedValue(texts([["both", "売上"]]));
+    vi.mocked(searchVectors).mockResolvedValue([
+      { fileId: "both", text: "売上", distance: 0.1 },
+    ]);
+
+    const result = await searchFiles("売上", "http://localhost");
+
+    // 両方で1位なので 1/(60+1) を二重に加算する。
+    expect(result.hits[0].score).toBeCloseTo(2 / 61, 10);
+  });
+
+  it("ranks a file present in both passes above one present in only one", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "keywordOnlyHit", title: "売上" }),
+      entry({ id: "inBoth", title: "売上" }),
+    ]);
+    vi.mocked(loadTexts).mockResolvedValue(
+      texts([["keywordOnlyHit", "売上"], ["inBoth", "売上"]]),
+    );
+    // ベクトル側には inBoth だけが出る。
+    vi.mocked(searchVectors).mockResolvedValue([
+      { fileId: "inBoth", text: "売上の話", distance: 0.1 },
+    ]);
+
+    const result = await searchFiles("売上", "http://localhost");
+
+    expect(result.hits[0].id).toBe("inBoth");
+    // 片方にしか出ない文書はその分の加点が無いので下に来る。
+    expect(result.hits[0].score).toBeGreaterThan(result.hits[1].score);
+  });
+
+  it("keeps only the nearest chunk per file", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry({ id: "multi", title: "x" })]);
+    vi.mocked(loadTexts).mockResolvedValue(texts([["multi", "x"]]));
+    vi.mocked(searchVectors).mockResolvedValue([
+      { fileId: "multi", text: "遠いチャンク", distance: 0.9 },
+      { fileId: "multi", text: "近いチャンク", distance: 0.1 },
+    ]);
+
+    const result = await searchFiles("なにか", "http://localhost");
+
+    expect(result.hits).toHaveLength(1);
+    expect(result.hits[0].semanticSnippet).toBe("近いチャンク");
+  });
+
+  it("ignores vector hits for files that are expired or deleted", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry({ id: "live" })]);
+    vi.mocked(loadTexts).mockResolvedValue(texts([["live", "unrelated"]]));
+    vi.mocked(searchVectors).mockResolvedValue([
+      { fileId: "gone", text: "消えたファイル", distance: 0.1 },
+    ]);
+
+    const result = await searchFiles("なにか", "http://localhost");
+    expect(result.hits).toHaveLength(0);
   });
 });

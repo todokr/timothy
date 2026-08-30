@@ -10,10 +10,13 @@ vi.mock("../lib/storage.js", async (importOriginal) => ({
   deleteFile: vi.fn(),
 }));
 
+vi.mock("../lib/vectorSearch.js", () => ({ deleteChunks: vi.fn() }));
+
 import app from "./delete.js";
 import { db } from "../lib/firebase.js";
 import { deleteFile } from "../lib/storage.js";
 import { HTML_FILE_TEXTS_COLLECTION } from "../lib/textIndex.js";
+import { deleteChunks } from "../lib/vectorSearch.js";
 
 /**
  * htmlFiles と htmlFileTexts を別々のモックで返す。
@@ -69,6 +72,7 @@ describe("DELETE /files/:id", () => {
     expect(deleteMock).toHaveBeenCalledOnce();
     // 消し忘れると削除済みファイルが検索結果に残り続ける。
     expect(deleteTextMock).toHaveBeenCalledOnce();
+    expect(deleteChunks).toHaveBeenCalledWith("01ABC");
   });
 
   // アップロードは Firestore への書き込みが先で GCS への PUT が後なので、
