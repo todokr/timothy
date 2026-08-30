@@ -42,6 +42,14 @@ describe("IP allowlist coverage", () => {
     expect((await request("/files/01ABC", "DELETE")).status).toBe(403);
   });
 
+  it("blocks the index endpoint", async () => {
+    expect((await request("/files/01ABC/index", "POST")).status).toBe(403);
+  });
+
+  it("blocks the reindex endpoint", async () => {
+    expect((await request("/files/reindex", "POST")).status).toBe(403);
+  });
+
   it("blocks the share endpoint", async () => {
     expect((await request("/s/01ABC")).status).toBe(403);
   });

@@ -66,6 +66,24 @@ export async function apiUpload(
     throw new Error(`Storage upload failed ${putRes.status}: ${body}`);
   }
 
+  // アップロード自体は成功しているので警告に留める
+  // （古い API を新しい CLI から叩く場合もここを通る）。
+  try {
+    const indexRes = await fetch(
+      `${config.apiEndpoint}/files/${encodeURIComponent(init.id)}/index`,
+      { method: "POST" }
+    );
+    if (!indexRes.ok) {
+      process.stderr.write(
+        `warning: failed to index file contents (HTTP ${indexRes.status}). Search may not find this file until it is re-indexed.\n`
+      );
+    }
+  } catch {
+    process.stderr.write(
+      "warning: failed to index file contents. Search may not find this file until it is re-indexed.\n"
+    );
+  }
+
   return { id: init.id, url: init.url, expiresAt: init.expiresAt };
 }
 

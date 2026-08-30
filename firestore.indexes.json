@@ -47,5 +47,11 @@
   //   },
   // ]
   "indexes": [],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "htmlFileTexts",
+      "fieldPath": "text",
+      "indexes": []
+    }
+  ]
 }

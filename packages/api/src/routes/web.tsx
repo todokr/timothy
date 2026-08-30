@@ -7,6 +7,7 @@ import {
   resolveBaseUrl,
   type FileEntry,
 } from "../lib/files.js";
+import { isExpired } from "../lib/time.js";
 import { CLIENT_SCRIPT, SETTINGS_SCRIPT } from "./webScript.js";
 import { db } from "../lib/firebase.js";
 import {
@@ -62,11 +63,9 @@ export function formatJst(iso: string): string {
   return JST_FORMATTER.format(new Date(iso));
 }
 
-/** null は無期限。Date.parse の NaN 比較に頼らず、明示的に期限なしと判定する。 */
-export function isExpired(iso: string | null, nowMs: number): boolean {
-  if (iso === null) return false;
-  return Date.parse(iso) < nowMs;
-}
+// 検索側と共用するため lib/time.ts へ移動。web.test.ts が "./web.js" から
+// import しているので re-export で受ける。
+export { isExpired };
 
 // hono の c.html は doctype を付けないため、明示的に先頭へ出力して
 // ブラウザが互換モード (quirks mode) で描画するのを防ぐ。

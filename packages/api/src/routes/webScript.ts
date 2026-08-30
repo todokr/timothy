@@ -135,6 +135,12 @@ export const CLIENT_SCRIPT = `
         return;
       }
 
+      // 失敗してもアップロード自体は成功しているので握り潰す
+      // （「インデックスを作成」で後から拾える）。
+      await fetch("/files/" + encodeURIComponent(issued.id) + "/index", {
+        method: "POST",
+      }).catch(function () {});
+
       location.reload();
     } catch (err) {
       showError(
