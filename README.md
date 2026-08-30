@@ -171,7 +171,7 @@ firebase deploy --only firestore
 
 これにより以下が適用されます:
 - `firestore.rules` — クライアントからの直接アクセスを禁止
-- `firestore.indexes.json` — `tim list` で使用する `htmlFiles` の複合インデックス（userId + createdAt）
+- `firestore.indexes.json` — Firestoreのインデックス定義
 
 **Cloud Storageバケットの作成:**
 
