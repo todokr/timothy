@@ -32,6 +32,30 @@ export type FileEntry = {
   expiresAt: string | null;
 };
 
+export type Snippet = {
+  before: string;
+  match: string;
+  after: string;
+};
+
+export type SearchHit = {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  createdAt: string;
+  expiresAt: string;
+  score: number;
+  snippets: Snippet[];
+};
+
+export type SearchResponse = {
+  query: string;
+  total: number;
+  pendingCount: number;
+  results: SearchHit[];
+};
+
 const jsonHeaders: Record<string, string> = {
   "Content-Type": "application/json",
 };
@@ -99,4 +123,15 @@ export async function apiDelete(id: string, config: Config): Promise<void> {
     method: "DELETE",
   });
   await assertOk(res);
+}
+
+export async function apiSearch(
+  query: string,
+  limit: number,
+  config: Config
+): Promise<SearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const res = await fetch(`${config.apiEndpoint}/search?${params}`);
+  await assertOk(res);
+  return (await res.json()) as SearchResponse;
 }
