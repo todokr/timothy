@@ -1,4 +1,5 @@
-import { listFiles, type FileEntry } from "./files.js";
+import { listFiles, indexStateOf, type FileEntry } from "./files.js";
+import { CURRENT_EXTRACTOR_VERSION } from "./htmlText.js";
 import { loadTexts } from "./textIndex.js";
 import { epochMills, isExpired } from "./time.js";
 import { normalizeQuery, scanText, scoreHits, type Snippet } from "./textSearch.js";
@@ -14,7 +15,7 @@ export type SearchHit = FileEntry & {
 export type SearchResult = {
   query: string;
   hits: SearchHit[];
-  /** 本文がまだ取り込まれていない生存ファイルの件数。UI のボタンに出す。 */
+  /** 取り込みが要る生存ファイルの件数。「インデックスを作成」が処理する対象と一致する。 */
   pendingCount: number;
   /** 埋め込みが使えずキーワードのみで応答したか。 */
   keywordOnly: boolean;
@@ -50,9 +51,17 @@ export async function searchFiles(
     return { query, hits: [], pendingCount: 0, keywordOnly: false };
   }
 
+  const states = new Map(
+    live.map((file) => [file.id, indexStateOf(file, CURRENT_EXTRACTOR_VERSION)]),
+  );
+  const needsIndexing = live.filter((file) => states.get(file.id) !== "indexed");
+
   const liveIds = new Set(live.map((file) => file.id));
-  const [{ texts, pending }, vectorHits] = await Promise.all([
-    loadTexts(live.map((file) => file.id)),
+  const [texts, vectorHits] = await Promise.all([
+    // 本文が無いファイルは引きに行かない。
+    loadTexts(
+      live.filter((f) => states.get(f.id) !== "pending").map((f) => f.id),
+    ),
     searchVectors(rawQuery.trim(), liveIds),
   ]);
 
@@ -79,7 +88,7 @@ export async function searchFiles(
   return {
     query,
     hits: hits.slice(0, limit),
-    pendingCount: pending.length,
+    pendingCount: needsIndexing.length,
     keywordOnly: vectorHits === null,
   };
 }

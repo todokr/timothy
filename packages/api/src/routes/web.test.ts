@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// listFiles / resolveBaseUrl だけ差し替え、HTML_FILES_COLLECTION は本物を使う。
+// 差し替えるのは Firestore を触る listFiles / resolveBaseUrl だけ。
+// HTML_FILES_COLLECTION と純関数の indexStateOf は本物を使う。
 vi.mock("../lib/files.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/files.js")>()),
   listFiles: vi.fn(),
@@ -25,6 +26,10 @@ function entry(overrides: Record<string, unknown> = {}) {
     url: "http://localhost/s/01ABC",
     expiresAt: "2099-01-01T00:00:00.000Z",
     createdAt: "2026-08-07T03:04:00.000Z",
+    // 既定は取り込み済み。バッジが出ないことを前提にしたテストが多いため。
+    extractorVersion: 1,
+    textLength: 120,
+    chunkCount: 2,
     ...overrides,
   };
 }
@@ -307,6 +312,51 @@ function hit(overrides: Record<string, unknown> = {}) {
   };
 }
 
+describe("GET / の取り込み状態の表示", () => {
+  beforeEach(() => {
+    vi.mocked(searchFiles).mockReset();
+    vi.mocked(listFiles).mockReset();
+  });
+
+  it("flags a file that has not been indexed", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ extractorVersion: undefined, textLength: 0, chunkCount: 0 }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("未取り込み");
+    // 一覧からそのまま取り込める導線があること。
+    expect(html).toContain("data-reindex");
+    expect(html).toContain("取り込みが必要なファイル 1 件");
+  });
+
+  // 埋め込み時にモデルが使えないと、本文はあるがベクトルが無い状態になる。
+  it("flags a file whose body was extracted but never embedded", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ extractorVersion: 1, textLength: 120, chunkCount: 0 }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("本文のみ");
+  });
+
+  it("shows no badge and no notice once everything is indexed", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry()]);
+    const html = await (await app.request("/")).text();
+    expect(html).not.toContain("未取り込み");
+    expect(html).not.toContain("本文のみ");
+    expect(html).not.toContain("取り込みが必要なファイル");
+  });
+
+  // 抽出できる本文が無い文書（JS デモなど）はチャンクが無くて当たり前。
+  it("does not flag a document that has no extractable text", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ extractorVersion: 1, textLength: 0, chunkCount: 0 }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).not.toContain("本文のみ");
+    expect(html).not.toContain("取り込みが必要なファイル");
+  });
+});
+
 describe("GET / with a search query", () => {
   beforeEach(() => {
     vi.mocked(searchFiles).mockReset();
@@ -393,7 +443,7 @@ describe("GET / with a search query", () => {
     } as never);
 
     const html = await (await app.request("/?q=q")).text();
-    expect(html).toContain("未インデックス 3 件");
+    expect(html).toContain("取り込みが必要なファイル 3 件");
     expect(html).toContain("data-reindex");
   });
 
@@ -405,7 +455,7 @@ describe("GET / with a search query", () => {
     } as never);
 
     const html = await (await app.request("/?q=q")).text();
-    expect(html).not.toContain("未インデックス");
+    expect(html).not.toContain("取り込みが必要なファイル");
   });
 
   // CLIENT_SCRIPT はアップロードフォームの要素を前提に初期化するので、

@@ -74,9 +74,14 @@ describe("POST /files/:id/index (integration)", () => {
     const data = stored.data()!;
     expect(data.text).toBe("売上は前月比で増加した");
     expect(data.text).not.toContain("hidden");
-    expect(data.extractorVersion).toBe(CURRENT_EXTRACTOR_VERSION);
     // TTL ポリシーで自動削除させるため親から複製している。
     expect(data.expiresAt.toDate()).toBeInstanceOf(Date);
+
+    // 取り込みの状態は一覧から見えるよう親ドキュメントに立てる。
+    const file = (await db.collection("htmlFiles").doc(id).get()).data()!;
+    expect(file.extractorVersion).toBe(CURRENT_EXTRACTOR_VERSION);
+    expect(file.textLength).toBe("売上は前月比で増加した".length);
+    expect(file.chunkCount).toBeGreaterThan(0);
   });
 
   it("is idempotent — re-indexing overwrites in place", async () => {
@@ -141,14 +146,14 @@ describe("POST /files/:id/index (integration)", () => {
 
 describe("loadTexts (integration)", () => {
   // 先行する describe の afterAll が走った後なので、自分でシードする。
-  it("reports ids with no stored text as pending", async () => {
+  it("returns the stored text and skips ids that have none", async () => {
     const id = "itest-load";
     await seedFile(id, "<p>読み込み確認</p>");
     await indexRequest(id);
 
-    const { texts, pending } = await loadTexts([id, "itest-never-indexed"]);
+    const texts = await loadTexts([id, "itest-never-indexed"]);
     expect(texts.get(id)).toBe("読み込み確認");
-    expect(pending).toEqual(["itest-never-indexed"]);
+    expect(texts.has("itest-never-indexed")).toBe(false);
   });
 });
 

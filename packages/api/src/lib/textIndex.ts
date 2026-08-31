@@ -22,7 +22,8 @@ export type IndexResult =
 
 /** ドキュメント ID がファイル ID と同じなので、何度呼んでも上書きになる。 */
 export async function indexFile(id: string): Promise<IndexResult> {
-  const snapshot = await db.collection(HTML_FILES_COLLECTION).doc(id).get();
+  const fileRef = db.collection(HTML_FILES_COLLECTION).doc(id);
+  const snapshot = await fileRef.get();
   if (!snapshot.exists) return { status: "notFound" };
 
   const data = snapshot.data()!;
@@ -48,7 +49,6 @@ export async function indexFile(id: string): Promise<IndexResult> {
     .doc(id)
     .set({
       text,
-      extractorVersion: CURRENT_EXTRACTOR_VERSION,
       // TTL ポリシーで期限切れを自動削除させるため、親からコピーする。
       expiresAt,
     });
@@ -56,9 +56,18 @@ export async function indexFile(id: string): Promise<IndexResult> {
   // 埋め込みに失敗してもキーワード検索は成立するので、取り込み自体は成功扱いにする。
   const chunks = chunkText(text);
   const vectors = chunks.length === 0 ? [] : await embed(chunks);
-  if (vectors !== null && vectors.length === chunks.length) {
-    await writeChunks(id, chunks, vectors, expiresAt);
+  const embedded = vectors !== null && vectors.length === chunks.length;
+  if (embedded) {
+    await writeChunks(id, chunks, vectors!, expiresAt);
   }
+
+  // 状態は派生データを書き終えてから最後に立てる。途中で落ちても
+  // 「未取り込み」と表示されるだけで、取り込み直せば直る。
+  await fileRef.update({
+    extractorVersion: CURRENT_EXTRACTOR_VERSION,
+    textLength: text.length,
+    chunkCount: embedded ? chunks.length : 0,
+  });
 
   return { status: "indexed" };
 }
@@ -67,30 +76,18 @@ export async function deleteFileText(id: string): Promise<void> {
   await db.collection(HTML_FILE_TEXTS_COLLECTION).doc(id).delete();
 }
 
-/**
- * getAll は存在しないドキュメントも exists: false で返すので、1回の呼び出しで
- * コーパスと未インデックスの ID が両方手に入る。古い extractorVersion も
- * 作り直し対象として pending に入れる。
- */
-export async function loadTexts(
-  ids: string[],
-): Promise<{ texts: Map<string, string>; pending: string[] }> {
+/** 取り込み済みファイルの本文をまとめて引く。状態の判定は listFiles 側が持つ。 */
+export async function loadTexts(ids: string[]): Promise<Map<string, string>> {
   const texts = new Map<string, string>();
-  const pending: string[] = [];
-  if (ids.length === 0) return { texts, pending };
+  if (ids.length === 0) return texts;
 
   const refs = ids.map((id) =>
     db.collection(HTML_FILE_TEXTS_COLLECTION).doc(id),
   );
 
   for (const snapshot of await db.getAll(...refs)) {
-    const data = snapshot.exists ? snapshot.data()! : null;
-    if (data === null || (data.extractorVersion ?? 0) < CURRENT_EXTRACTOR_VERSION) {
-      pending.push(snapshot.id);
-      continue;
-    }
-    texts.set(snapshot.id, data.text ?? "");
+    if (snapshot.exists) texts.set(snapshot.id, snapshot.data()!.text ?? "");
   }
 
-  return { texts, pending };
+  return texts;
 }

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
-import { listFiles, resolveBaseUrl } from "../lib/files.js";
-import { indexFile, loadTexts } from "../lib/textIndex.js";
+import { indexStateOf, listFiles, resolveBaseUrl } from "../lib/files.js";
+import { CURRENT_EXTRACTOR_VERSION } from "../lib/htmlText.js";
+import { indexFile } from "../lib/textIndex.js";
 import { epochMills, isExpired } from "../lib/time.js";
 
 // /files 配下にマウントするので ipAllowlistMiddleware の "/files/*" がそのまま効く
@@ -13,11 +14,11 @@ const REINDEX_BATCH_LIMIT = 10;
 app.post("/reindex", async (c) => {
   const files = await listFiles(resolveBaseUrl(c));
   const nowMs = epochMills();
-  const liveIds = files
+  const pending = files
     .filter((file) => !isExpired(file.expiresAt, nowMs))
+    .filter((file) => indexStateOf(file, CURRENT_EXTRACTOR_VERSION) !== "indexed")
     .map((file) => file.id);
 
-  const { pending } = await loadTexts(liveIds);
   const batch = pending.slice(0, REINDEX_BATCH_LIMIT);
 
   // 1件の失敗でバッチ全体を落とさない。リトライはもう一度呼ぶだけ。

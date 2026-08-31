@@ -676,3 +676,25 @@ export const noticeClass = css`
   border: 1px solid var(--gray-200);
   border-radius: var(--radius-md);
 `;
+
+export const badgeClass = css`
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0 var(--space-2);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1.5rem;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  vertical-align: middle;
+
+  &[data-state="pending"] {
+    color: var(--danger);
+    background: var(--danger-soft);
+  }
+
+  &[data-state="textOnly"] {
+    color: var(--gray-700);
+    background: var(--gray-100);
+  }
+`;

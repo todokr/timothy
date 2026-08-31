@@ -32,6 +32,10 @@ vi.mock("./lib/firebase.js", () => {
         store.set(key, data);
         return Promise.resolve();
       },
+      update: (patch: Record<string, unknown>) => {
+        store.set(key, { ...(store.get(key) ?? {}), ...patch });
+        return Promise.resolve();
+      },
       delete: () => {
         store.delete(key);
         return Promise.resolve();

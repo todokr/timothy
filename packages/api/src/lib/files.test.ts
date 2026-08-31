@@ -6,7 +6,7 @@ vi.mock("./firebase.js", () => ({
 }));
 
 import { db } from "./firebase.js";
-import { resolveBaseUrl, listFiles } from "./files.js";
+import { indexStateOf, listFiles, resolveBaseUrl } from "./files.js";
 
 function makeContext(headers: Record<string, string>): Context {
   return {
@@ -75,6 +75,10 @@ describe("listFiles", () => {
         url: "https://api.example.com/s/01ABC",
         expiresAt: "2026-08-14T00:00:00.000Z",
         createdAt: "2026-08-07T00:00:00.000Z",
+        // 取り込み前のドキュメントには状態フィールドが無い。
+        extractorVersion: undefined,
+        textLength: 0,
+        chunkCount: 0,
       },
     ]);
   });
@@ -97,10 +101,90 @@ describe("listFiles", () => {
     expect(files[0].expiresAt).toBeNull();
   });
 
+  it("carries the index state through when the file has been indexed", async () => {
+    mockSnapshot([
+      {
+        id: "01ABC",
+        data: {
+          title: "t",
+          description: "",
+          expiresAt: { toDate: () => new Date("2026-08-14T00:00:00.000Z") },
+          createdAt: { toDate: () => new Date("2026-08-07T00:00:00.000Z") },
+          extractorVersion: 1,
+          textLength: 120,
+          chunkCount: 2,
+        },
+      },
+    ]);
+
+    const [file] = await listFiles("http://localhost");
+    expect(file.extractorVersion).toBe(1);
+    expect(file.textLength).toBe(120);
+    expect(file.chunkCount).toBe(2);
+  });
+
   it("queries the htmlFiles collection ordered by createdAt descending", async () => {
     const { orderByMock } = mockSnapshot([]);
     await listFiles("http://localhost");
     expect(db.collection).toHaveBeenCalledWith("htmlFiles");
     expect(orderByMock).toHaveBeenCalledWith("createdAt", "desc");
+  });
+});
+
+describe("indexStateOf", () => {
+  const base = {
+    id: "x",
+    title: "t",
+    description: "",
+    url: "u",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    createdAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  it("treats a file with no extractorVersion as pending", () => {
+    expect(
+      indexStateOf(
+        { ...base, extractorVersion: undefined, textLength: 0, chunkCount: 0 },
+        1,
+      ),
+    ).toBe("pending");
+  });
+
+  it("treats an older extractorVersion as pending", () => {
+    expect(
+      indexStateOf(
+        { ...base, extractorVersion: 1, textLength: 10, chunkCount: 1 },
+        2,
+      ),
+    ).toBe("pending");
+  });
+
+  // 埋め込み時にモデルが使えないと、本文はあるがベクトルが無い状態になる。
+  it("reports textOnly when there is body text but no chunks", () => {
+    expect(
+      indexStateOf(
+        { ...base, extractorVersion: 1, textLength: 120, chunkCount: 0 },
+        1,
+      ),
+    ).toBe("textOnly");
+  });
+
+  // JS デモのように抽出できる本文が無い文書は、チャンクが無くて当たり前。
+  it("does not flag a document that has no extractable text", () => {
+    expect(
+      indexStateOf(
+        { ...base, extractorVersion: 1, textLength: 0, chunkCount: 0 },
+        1,
+      ),
+    ).toBe("indexed");
+  });
+
+  it("reports indexed when chunks are present", () => {
+    expect(
+      indexStateOf(
+        { ...base, extractorVersion: 1, textLength: 120, chunkCount: 3 },
+        1,
+      ),
+    ).toBe("indexed");
   });
 });

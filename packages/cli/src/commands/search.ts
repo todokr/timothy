@@ -48,7 +48,7 @@ export const searchCommand = new Command("search")
 
     if (response.pendingCount > 0) {
       process.stderr.write(
-        `warning: ${response.pendingCount} file(s) are not indexed yet and were not searched. ` +
+        `warning: ${response.pendingCount} file(s) are not fully indexed. ` +
           `Open the web UI to index them.\n`
       );
     }

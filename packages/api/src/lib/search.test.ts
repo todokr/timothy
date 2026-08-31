@@ -27,12 +27,16 @@ function entry(overrides: Record<string, unknown> = {}) {
     url: "http://localhost/s/01ABC",
     expiresAt: future(),
     createdAt: "2026-08-07T03:04:00.000Z",
+    // 既定は取り込み済み。未取り込みを試すケースだけ上書きする。
+    extractorVersion: 1,
+    textLength: 120,
+    chunkCount: 2,
     ...overrides,
   };
 }
 
-function texts(entries: Array<[string, string]>, pending: string[] = []) {
-  return { texts: new Map(entries), pending };
+function texts(entries: Array<[string, string]>) {
+  return new Map(entries);
 }
 
 describe("searchFiles", () => {
@@ -94,15 +98,31 @@ describe("searchFiles", () => {
     expect(result.hits.map((h) => h.id)).toEqual(["title", "body"]);
   });
 
-  it("returns files whose text has not been indexed yet as misses, not errors", async () => {
-    vi.mocked(listFiles).mockResolvedValue([entry({ id: "unindexed", title: "x" })]);
-    vi.mocked(loadTexts).mockResolvedValue(texts([], ["unindexed"]));
+  it("counts a file that has not been indexed and does not match it", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "unindexed", title: "x", extractorVersion: undefined, textLength: 0, chunkCount: 0 }),
+    ]);
+    vi.mocked(loadTexts).mockResolvedValue(texts([]));
 
     const result = await searchFiles("anything", "http://localhost");
 
     expect(result.hits).toHaveLength(0);
     // UI がボタンの横に出す件数。
     expect(result.pendingCount).toBe(1);
+  });
+
+  // 本文はあるがベクトルが無い状態も、ボタンの処理対象なので数える。
+  it("counts a file whose body was extracted but never embedded", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "textOnly", extractorVersion: 1, textLength: 120, chunkCount: 0 }),
+    ]);
+    vi.mocked(loadTexts).mockResolvedValue(texts([["textOnly", "本文"]]));
+
+    const result = await searchFiles("本文", "http://localhost");
+
+    expect(result.pendingCount).toBe(1);
+    // キーワードでは引けるので、ヒット自体はする。
+    expect(result.hits.map((h) => h.id)).toEqual(["textOnly"]);
   });
 
   it("returns nothing for a blank query without reading the text store", async () => {

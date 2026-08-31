@@ -3,10 +3,12 @@ import { Style } from "hono/css";
 import { raw } from "hono/html";
 import {
   HTML_FILES_COLLECTION,
+  indexStateOf,
   listFiles,
   resolveBaseUrl,
   type FileEntry,
 } from "../lib/files.js";
+import { CURRENT_EXTRACTOR_VERSION } from "../lib/htmlText.js";
 import { searchFiles, type SearchHit } from "../lib/search.js";
 import { isExpired } from "../lib/time.js";
 import { CLIENT_SCRIPT, SETTINGS_SCRIPT } from "./webScript.js";
@@ -55,6 +57,7 @@ import {
   searchResultClass,
   snippetClass,
   pendingNoticeClass,
+  badgeClass,
   semanticSnippetClass,
   noticeClass,
 } from "./webStyles.js";
@@ -102,6 +105,17 @@ function Layout(props: { children: unknown; script?: string }) {
   );
 }
 
+/** 取り込みが済んでいない行にだけ印を付ける。 */
+function IndexBadge(props: { file: FileEntry }) {
+  const state = indexStateOf(props.file, CURRENT_EXTRACTOR_VERSION);
+  if (state === "indexed") return null;
+  return (
+    <span class={badgeClass} data-state={state}>
+      {state === "pending" ? "未取り込み" : "本文のみ"}
+    </span>
+  );
+}
+
 function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
   if (props.files.length === 0) {
     return (
@@ -132,7 +146,10 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
                 行の高さが揺れる。
               */}
               <td class={titleCellClass}>
-                <span class={titleTextClass}>{file.title}</span>
+                <span class={titleTextClass}>
+                  {file.title}
+                  <IndexBadge file={file} />
+                </span>
                 {file.description ? (
                   <span class={descriptionTextClass} title={file.description}>
                     {file.description}
@@ -209,7 +226,7 @@ function PendingNotice(props: { count: number }) {
   if (props.count === 0) return null;
   return (
     <div class={pendingNoticeClass}>
-      <span>未インデックス {props.count} 件</span>
+      <span>取り込みが必要なファイル {props.count} 件</span>
       <button type="button" class={ghostButtonClass} data-reindex>
         インデックスを作成
       </button>
@@ -383,6 +400,13 @@ app.get("/", async (c) => {
     <Layout script={CLIENT_SCRIPT}>
       <h1 class={headerClass}>Tim</h1>
       <SearchForm query={query} />
+      <PendingNotice
+        count={
+          live.filter(
+            (file) => indexStateOf(file, CURRENT_EXTRACTOR_VERSION) !== "indexed",
+          ).length
+        }
+      />
       <UploadForm />
       <FileTable files={live} emptyMessage={emptyMessage} />
     </Layout>
