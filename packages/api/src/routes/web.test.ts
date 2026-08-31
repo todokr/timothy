@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// listFiles / resolveBaseUrl だけ差し替え、HTML_FILES_COLLECTION は本物を使う。
+// 差し替えるのは Firestore を触る listFiles / resolveBaseUrl だけ。
+// HTML_FILES_COLLECTION と純関数の indexStateOf は本物を使う。
 vi.mock("../lib/files.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/files.js")>()),
   listFiles: vi.fn(),
   resolveBaseUrl: vi.fn().mockReturnValue("http://localhost"),
 }));
+vi.mock("../lib/search.js", () => ({ searchFiles: vi.fn() }));
 
 vi.mock("../lib/firebase.js", () => ({
   db: { collection: vi.fn() },
@@ -13,6 +15,7 @@ vi.mock("../lib/firebase.js", () => ({
 
 import { listFiles } from "../lib/files.js";
 import { db } from "../lib/firebase.js";
+import { searchFiles } from "../lib/search.js";
 import app, { formatJst, isExpired } from "./web.js";
 
 function entry(overrides: Record<string, unknown> = {}) {
@@ -23,6 +26,10 @@ function entry(overrides: Record<string, unknown> = {}) {
     url: "http://localhost/s/01ABC",
     expiresAt: "2099-01-01T00:00:00.000Z",
     createdAt: "2026-08-07T03:04:00.000Z",
+    // 既定は取り込み済み。バッジが出ないことを前提にしたテストが多いため。
+    extractorVersion: 1,
+    textLength: 120,
+    chunkCount: 2,
     ...overrides,
   };
 }
@@ -291,7 +298,207 @@ describe("GET /", () => {
 
 });
 
+function hit(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "01ABC",
+    title: "Monthly Report",
+    description: "Details",
+    url: "http://localhost/s/01ABC",
+    expiresAt: "2099-01-01T00:00:00.000Z",
+    createdAt: "2026-08-07T03:04:00.000Z",
+    score: 3,
+    snippets: [{ before: "sales ", match: "grew", after: " last month" }],
+    ...overrides,
+  };
+}
+
+describe("GET / の取り込み状態の表示", () => {
+  beforeEach(() => {
+    vi.mocked(searchFiles).mockReset();
+    vi.mocked(listFiles).mockReset();
+  });
+
+  it("flags a file that has not been indexed", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ extractorVersion: undefined, textLength: 0, chunkCount: 0 }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("未取り込み");
+    // 一覧からそのまま取り込める導線があること。
+    expect(html).toContain("data-reindex");
+    expect(html).toContain("取り込みが必要なファイル 1 件");
+  });
+
+  // 埋め込み時にモデルが使えないと、本文はあるがベクトルが無い状態になる。
+  it("flags a file whose body was extracted but never embedded", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ extractorVersion: 1, textLength: 120, chunkCount: 0 }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain("本文のみ");
+  });
+
+  it("shows no badge and no notice once everything is indexed", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry()]);
+    const html = await (await app.request("/")).text();
+    expect(html).not.toContain("未取り込み");
+    expect(html).not.toContain("本文のみ");
+    expect(html).not.toContain("取り込みが必要なファイル");
+  });
+
+  // 抽出できる本文が無い文書（JS デモなど）はチャンクが無くて当たり前。
+  it("does not flag a document that has no extractable text", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ extractorVersion: 1, textLength: 0, chunkCount: 0 }),
+    ]);
+    const html = await (await app.request("/")).text();
+    expect(html).not.toContain("本文のみ");
+    expect(html).not.toContain("取り込みが必要なファイル");
+  });
+});
+
+describe("GET / with a search query", () => {
+  beforeEach(() => {
+    vi.mocked(searchFiles).mockReset();
+    vi.mocked(listFiles).mockReset();
+  });
+
+  it("renders the search box on the plain listing page", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+    expect(html).toContain('type="search"');
+    expect(html).toContain('name="q"');
+    // クエリが無いときは検索しない。
+    expect(searchFiles).not.toHaveBeenCalled();
+  });
+
+  it("renders hits with the matched text wrapped in mark", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "grew",
+      hits: [hit()],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=grew")).text();
+
+    expect(searchFiles).toHaveBeenCalledWith("grew", "http://localhost");
+    expect(html).toContain("<mark>grew</mark>");
+    expect(html).toContain("Monthly Report");
+    expect(html).toContain("検索結果 1 件");
+  });
+
+  it("trims the query before searching", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "grew",
+      hits: [],
+      pendingCount: 0,
+    } as never);
+    await app.request("/?q=%20grew%20");
+    expect(vi.mocked(searchFiles).mock.calls[0][0]).toBe("grew");
+  });
+
+  // スニペットはアップロードされた HTML から取り出したテキストなので、
+  // 管理画面から見れば敵性の入力。raw() や dangerouslySetInnerHTML で
+  // 組み立てると serve.ts の sandbox CSP が守っている境界を自分で壊す。
+  it("escapes HTML inside a snippet instead of rendering it", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "script",
+      hits: [
+        hit({
+          title: "<img src=x onerror=alert(1)>",
+          snippets: [
+            { before: "<script>alert(1)</script>", match: "script", after: "</p>" },
+          ],
+        }),
+      ],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=script")).text();
+
+    expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(html).not.toContain("<script>alert(1)</script>");
+    expect(html).not.toContain("<img src=x onerror=alert(1)>");
+    // ハイライト自体は生きていること。
+    expect(html).toContain("<mark>script</mark>");
+  });
+
+  it("shows a distinct empty state naming the query", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "missing",
+      hits: [],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=missing")).text();
+    expect(html).toContain("「missing」に一致するファイルはありません");
+    expect(html).not.toContain("まだファイルがありません");
+  });
+
+  it("offers the reindex button when files are not indexed yet", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "q",
+      hits: [],
+      pendingCount: 3,
+    } as never);
+
+    const html = await (await app.request("/?q=q")).text();
+    expect(html).toContain("取り込みが必要なファイル 3 件");
+    expect(html).toContain("data-reindex");
+  });
+
+  it("hides the reindex notice when nothing is pending", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "q",
+      hits: [],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=q")).text();
+    expect(html).not.toContain("取り込みが必要なファイル");
+  });
+
+  // CLIENT_SCRIPT はアップロードフォームの要素を前提に初期化するので、
+  // 検索結果ページから外すと削除・コピー・再インデックスのハンドラごと死ぬ。
+  it("still renders the upload form so the client script can initialise", async () => {
+    vi.mocked(searchFiles).mockResolvedValue({
+      query: "q",
+      hits: [],
+      pendingCount: 0,
+    } as never);
+
+    const html = await (await app.request("/?q=q")).text();
+    expect(html).toContain('id="upload-form"');
+    expect(html).toContain('id="drop-zone"');
+    expect(html).toContain('id="submit-button"');
+  });
+
+  it("keeps the search box on the error page", async () => {
+    vi.mocked(searchFiles).mockRejectedValue(new Error("boom"));
+    const res = await app.request("/?q=q");
+    expect(res.status).toBe(500);
+    expect(await res.text()).toContain('name="q"');
+  });
+});
+
 describe("CLIENT_SCRIPT", () => {
+  // 一覧では tr、検索結果では article が行にあたるため、両方を拾う必要がある。
+  it("finds the row for a delete button in both the table and the search results", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    expect(CLIENT_SCRIPT).toContain('closest("tr, article")');
+  });
+
+  it("loops the reindex call until nothing remains", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    expect(CLIENT_SCRIPT).toContain('fetch("/files/reindex"');
+    expect(CLIENT_SCRIPT).toContain("body.remaining === 0");
+  });
+
+  it("indexes the file contents after a successful upload", async () => {
+    const { CLIENT_SCRIPT } = await import("./webScript.js");
+    expect(CLIENT_SCRIPT).toContain('"/files/" + encodeURIComponent(issued.id) + "/index"');
+  });
+
   it("does not contain a closing script tag that would break embedding", async () => {
     const { CLIENT_SCRIPT } = await import("./webScript.js");
     expect(CLIENT_SCRIPT).not.toContain("</script>");

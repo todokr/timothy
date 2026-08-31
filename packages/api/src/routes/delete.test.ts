@@ -10,12 +10,21 @@ vi.mock("../lib/storage.js", async (importOriginal) => ({
   deleteFile: vi.fn(),
 }));
 
+vi.mock("../lib/vectorSearch.js", () => ({ deleteChunks: vi.fn() }));
+
 import app from "./delete.js";
 import { db } from "../lib/firebase.js";
 import { deleteFile } from "../lib/storage.js";
+import { HTML_FILE_TEXTS_COLLECTION } from "../lib/textIndex.js";
+import { deleteChunks } from "../lib/vectorSearch.js";
 
+/**
+ * htmlFiles と htmlFileTexts を別々のモックで返す。
+ * Firestore はカスケード削除をしないので、どちらも消えることを個別に確かめる。
+ */
 function mockDoc(exists: boolean, storagePath = "timothy-files/01ABC.html") {
   const deleteMock = vi.fn().mockResolvedValue(undefined);
+  const deleteTextMock = vi.fn().mockResolvedValue(undefined);
   const docRef = {
     get: vi.fn().mockResolvedValue({
       exists,
@@ -23,10 +32,17 @@ function mockDoc(exists: boolean, storagePath = "timothy-files/01ABC.html") {
     }),
     delete: deleteMock,
   };
-  vi.mocked(db.collection).mockReturnValue({
-    doc: vi.fn().mockReturnValue(docRef),
-  } as unknown as ReturnType<typeof db.collection>);
-  return { docRef, deleteMock };
+  vi.mocked(db.collection).mockImplementation((name: string) => {
+    if (name === HTML_FILE_TEXTS_COLLECTION) {
+      return {
+        doc: vi.fn().mockReturnValue({ delete: deleteTextMock }),
+      } as unknown as ReturnType<typeof db.collection>;
+    }
+    return {
+      doc: vi.fn().mockReturnValue(docRef),
+    } as unknown as ReturnType<typeof db.collection>;
+  });
+  return { docRef, deleteMock, deleteTextMock };
 }
 
 function request(id: string) {
@@ -46,14 +62,17 @@ describe("DELETE /files/:id", () => {
     expect(deleteFile).not.toHaveBeenCalled();
   });
 
-  it("deletes the stored object and the record", async () => {
-    const { deleteMock } = mockDoc(true);
+  it("deletes the stored object, the record and the extracted text", async () => {
+    const { deleteMock, deleteTextMock } = mockDoc(true);
     const res = await request("01ABC");
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ id: "01ABC" });
     expect(deleteFile).toHaveBeenCalledWith("timothy-files/01ABC.html");
     expect(deleteMock).toHaveBeenCalledOnce();
+    // 消し忘れると削除済みファイルが検索結果に残り続ける。
+    expect(deleteTextMock).toHaveBeenCalledOnce();
+    expect(deleteChunks).toHaveBeenCalledWith("01ABC");
   });
 
   // アップロードは Firestore への書き込みが先で GCS への PUT が後なので、
@@ -72,7 +91,7 @@ describe("DELETE /files/:id", () => {
   });
 
   it("propagates storage failures that are not a missing object", async () => {
-    const { deleteMock } = mockDoc(true);
+    const { deleteMock, deleteTextMock } = mockDoc(true);
     const denied = Object.assign(new Error("Permission denied"), { code: 403 });
     vi.mocked(deleteFile).mockRejectedValue(denied);
 
@@ -80,5 +99,6 @@ describe("DELETE /files/:id", () => {
 
     expect(res.status).toBeGreaterThanOrEqual(500);
     expect(deleteMock).not.toHaveBeenCalled();
+    expect(deleteTextMock).not.toHaveBeenCalled();
   });
 });

@@ -135,6 +135,12 @@ export const CLIENT_SCRIPT = `
         return;
       }
 
+      // 失敗してもアップロード自体は成功しているので握り潰す
+      // （「インデックスを作成」で後から拾える）。
+      await fetch("/files/" + encodeURIComponent(issued.id) + "/index", {
+        method: "POST",
+      }).catch(function () {});
+
       location.reload();
     } catch (err) {
       showError(
@@ -151,7 +157,8 @@ export const CLIENT_SCRIPT = `
     button.addEventListener("click", async function () {
       if (!confirm("このファイルを削除しますか？")) return;
 
-      var row = button.closest("tr");
+      // 一覧では tr、検索結果では article が行にあたる。
+      var row = button.closest("tr, article");
       var rowError = row.querySelector("[data-row-error]");
       rowError.textContent = "";
       button.disabled = true;
@@ -166,6 +173,32 @@ export const CLIENT_SCRIPT = `
         location.reload();
       } catch (err) {
         rowError.textContent = "削除に失敗しました: " + err.message;
+        button.disabled = false;
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-reindex]").forEach(function (button) {
+    button.addEventListener("click", async function () {
+      var status = document.querySelector("[data-reindex-status]");
+      button.disabled = true;
+
+      // サーバが1回あたりの件数を絞るので、remaining が 0 になるまで呼び直す。
+      try {
+        for (;;) {
+          var res = await fetch("/files/reindex", { method: "POST" });
+          if (!res.ok) {
+            status.textContent = "作成に失敗しました (HTTP " + res.status + ")";
+            button.disabled = false;
+            return;
+          }
+          var body = await res.json();
+          if (body.remaining === 0) break;
+          status.textContent = "残り " + body.remaining + " 件…";
+        }
+        location.reload();
+      } catch (err) {
+        status.textContent = "作成に失敗しました: " + err.message;
         button.disabled = false;
       }
     });

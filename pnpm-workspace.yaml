@@ -3,4 +3,8 @@ packages:
 allowBuilds:
   '@firebase/util': true
   esbuild: true
+  # 埋め込みモデルの実行に使うネイティブバイナリを取得する。
+  onnxruntime-node: true
   protobufjs: true
+  # transformers.js の画像パイプライン用。テキスト埋め込みには不要。
+  sharp: false

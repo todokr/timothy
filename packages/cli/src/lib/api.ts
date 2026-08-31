@@ -32,6 +32,30 @@ export type FileEntry = {
   expiresAt: string | null;
 };
 
+export type Snippet = {
+  before: string;
+  match: string;
+  after: string;
+};
+
+export type SearchHit = {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  createdAt: string;
+  expiresAt: string;
+  score: number;
+  snippets: Snippet[];
+};
+
+export type SearchResponse = {
+  query: string;
+  total: number;
+  pendingCount: number;
+  results: SearchHit[];
+};
+
 const jsonHeaders: Record<string, string> = {
   "Content-Type": "application/json",
 };
@@ -66,6 +90,24 @@ export async function apiUpload(
     throw new Error(`Storage upload failed ${putRes.status}: ${body}`);
   }
 
+  // アップロード自体は成功しているので警告に留める
+  // （古い API を新しい CLI から叩く場合もここを通る）。
+  try {
+    const indexRes = await fetch(
+      `${config.apiEndpoint}/files/${encodeURIComponent(init.id)}/index`,
+      { method: "POST" }
+    );
+    if (!indexRes.ok) {
+      process.stderr.write(
+        `warning: failed to index file contents (HTTP ${indexRes.status}). Search may not find this file until it is re-indexed.\n`
+      );
+    }
+  } catch {
+    process.stderr.write(
+      "warning: failed to index file contents. Search may not find this file until it is re-indexed.\n"
+    );
+  }
+
   return { id: init.id, url: init.url, expiresAt: init.expiresAt };
 }
 
@@ -81,4 +123,15 @@ export async function apiDelete(id: string, config: Config): Promise<void> {
     method: "DELETE",
   });
   await assertOk(res);
+}
+
+export async function apiSearch(
+  query: string,
+  limit: number,
+  config: Config
+): Promise<SearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  const res = await fetch(`${config.apiEndpoint}/search?${params}`);
+  await assertOk(res);
+  return (await res.json()) as SearchResponse;
 }

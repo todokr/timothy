@@ -48,13 +48,26 @@
   // ]
   "indexes": [
     {
-      "collectionGroup": "htmlFiles",
+      "collectionGroup": "htmlFileChunks",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "embedding",
+          "vectorConfig": { "dimension": 384, "flat": {} }
+        }
       ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "htmlFileTexts",
+      "fieldPath": "text",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "htmlFileChunks",
+      "fieldPath": "text",
+      "indexes": []
+    }
+  ]
 }

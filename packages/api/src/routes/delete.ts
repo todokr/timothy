@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { db } from "../lib/firebase.js";
 import { deleteFile, isNotFoundError } from "../lib/storage.js";
+import { deleteFileText } from "../lib/textIndex.js";
+import { deleteChunks } from "../lib/vectorSearch.js";
 
 const HTML_FILES_COLLECTION = "htmlFiles";
 
@@ -29,6 +31,11 @@ app.delete("/:id", async (c) => {
   }
 
   await docRef.delete();
+
+  // Firestore はカスケード削除しない。消し忘れると削除済みファイルが
+  // 検索結果に残り続ける。
+  await deleteFileText(id);
+  await deleteChunks(id);
 
   return c.json({ id });
 });

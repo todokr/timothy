@@ -3,10 +3,14 @@ import { Style } from "hono/css";
 import { raw } from "hono/html";
 import {
   HTML_FILES_COLLECTION,
+  indexStateOf,
   listFiles,
   resolveBaseUrl,
   type FileEntry,
 } from "../lib/files.js";
+import { CURRENT_EXTRACTOR_VERSION } from "../lib/htmlText.js";
+import { searchFiles, type SearchHit } from "../lib/search.js";
+import { isExpired } from "../lib/time.js";
 import { CLIENT_SCRIPT, SETTINGS_SCRIPT } from "./webScript.js";
 import { db } from "../lib/firebase.js";
 import {
@@ -47,6 +51,15 @@ import {
   tokenListClass,
   riskBadgeClass,
   formActionsClass,
+  searchFormClass,
+  searchSummaryClass,
+  searchResultsClass,
+  searchResultClass,
+  snippetClass,
+  pendingNoticeClass,
+  badgeClass,
+  semanticSnippetClass,
+  noticeClass,
 } from "./webStyles.js";
 
 const JST_FORMATTER = new Intl.DateTimeFormat("sv-SE", {
@@ -62,11 +75,9 @@ export function formatJst(iso: string): string {
   return JST_FORMATTER.format(new Date(iso));
 }
 
-/** null は無期限。Date.parse の NaN 比較に頼らず、明示的に期限なしと判定する。 */
-export function isExpired(iso: string | null, nowMs: number): boolean {
-  if (iso === null) return false;
-  return Date.parse(iso) < nowMs;
-}
+// 検索側と共用するため lib/time.ts へ移動。web.test.ts が "./web.js" から
+// import しているので re-export で受ける。
+export { isExpired };
 
 // hono の c.html は doctype を付けないため、明示的に先頭へ出力して
 // ブラウザが互換モード (quirks mode) で描画するのを防ぐ。
@@ -91,6 +102,17 @@ function Layout(props: { children: unknown; script?: string }) {
         </body>
       </html>
     </>
+  );
+}
+
+/** 取り込みが済んでいない行にだけ印を付ける。 */
+function IndexBadge(props: { file: FileEntry }) {
+  const state = indexStateOf(props.file, CURRENT_EXTRACTOR_VERSION);
+  if (state === "indexed") return null;
+  return (
+    <span class={badgeClass} data-state={state}>
+      {state === "pending" ? "未取り込み" : "本文のみ"}
+    </span>
   );
 }
 
@@ -124,7 +146,10 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
                 行の高さが揺れる。
               */}
               <td class={titleCellClass}>
-                <span class={titleTextClass}>{file.title}</span>
+                <span class={titleTextClass}>
+                  {file.title}
+                  <IndexBadge file={file} />
+                </span>
                 {file.description ? (
                   <span class={descriptionTextClass} title={file.description}>
                     {file.description}
@@ -174,6 +199,112 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
   );
 }
 
+function SearchForm(props: { query: string }) {
+  // #upload-form の中に置かないこと（CLIENT_SCRIPT が submit を乗っ取っている）。
+  return (
+    <form class={searchFormClass} method="get" action="/" role="search">
+      <input
+        type="search"
+        name="q"
+        value={props.query}
+        placeholder="ファイル本文を検索"
+        aria-label="ファイル本文を検索"
+      />
+      <button type="submit" class={submitButtonClass}>
+        検索
+      </button>
+      {props.query !== "" ? (
+        <a class={ghostButtonClass} href="/">
+          クリア
+        </a>
+      ) : null}
+    </form>
+  );
+}
+
+function PendingNotice(props: { count: number }) {
+  if (props.count === 0) return null;
+  return (
+    <div class={pendingNoticeClass}>
+      <span>取り込みが必要なファイル {props.count} 件</span>
+      <button type="button" class={ghostButtonClass} data-reindex>
+        インデックスを作成
+      </button>
+      <span data-reindex-status></span>
+    </div>
+  );
+}
+
+function SnippetText(props: { snippet: SearchHit["snippets"][number] }) {
+  // 中身はアップロードされた HTML 由来なので、HTML 文字列を組み立てず
+  // JSX の子として渡す（hono/jsx がエスケープする）。
+  return (
+    <p class={snippetClass}>
+      …{props.snippet.before}
+      <mark>{props.snippet.match}</mark>
+      {props.snippet.after}…
+    </p>
+  );
+}
+
+function SearchResults(props: {
+  query: string;
+  hits: SearchHit[];
+  keywordOnly: boolean;
+}) {
+  if (props.hits.length === 0) {
+    return (
+      <div class={emptyClass}>
+        <p>「{props.query}」に一致するファイルはありません</p>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <p class={searchSummaryClass}>
+        <span>「{props.query}」の検索結果 {props.hits.length} 件</span>
+      </p>
+      {props.keywordOnly ? (
+        <p class={noticeClass}>
+          意味検索は利用できません。キーワード一致のみの結果です。
+        </p>
+      ) : null}
+      <div class={searchResultsClass}>
+        {props.hits.map((hit) => (
+          <article class={searchResultClass} key={hit.id}>
+            <h2>
+              <a href={hit.url} target="_blank" rel="noreferrer">
+                {hit.title}
+              </a>
+            </h2>
+            <p class="meta">
+              有効期限 {hit.expiresAt === null ? "無期限" : formatJst(hit.expiresAt)} ・ 作成{" "}
+              {formatJst(hit.createdAt)}
+              {hit.description !== "" ? ` ・ ${hit.description}` : ""}
+            </p>
+            {hit.snippets.map((snippet, i) => (
+              <SnippetText snippet={snippet} key={i} />
+            ))}
+            {hit.snippets.length === 0 && hit.semanticSnippet !== null ? (
+              <p class={semanticSnippetClass}>{hit.semanticSnippet}</p>
+            ) : null}
+            <div class="actions">
+              <button type="button" class={ghostButtonClass} data-copy-url={hit.url}>
+                URL をコピー
+              </button>
+              <button type="button" class={dangerButtonClass} data-delete-id={hit.id}>
+                削除
+              </button>
+              <span class={rowErrorClass} data-row-error></span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function UploadForm() {
   return (
     <form id="upload-form" class={formClass}>
@@ -215,16 +346,45 @@ function UploadForm() {
 const app = new Hono();
 
 app.get("/", async (c) => {
+  const query = (c.req.query("q") ?? "").trim();
+  const baseUrl = resolveBaseUrl(c);
+
   let files: FileEntry[];
+  let search: Awaited<ReturnType<typeof searchFiles>> | null = null;
   try {
-    files = await listFiles(resolveBaseUrl(c));
+    if (query === "") {
+      files = await listFiles(baseUrl);
+    } else {
+      search = await searchFiles(query, baseUrl);
+      files = [];
+    }
   } catch {
     return c.html(
       <Layout>
         <h1 class={headerClass}>Tim</h1>
+        {/* 一覧が取れなくても検索窓は残す。消えると壊れて見える。 */}
+        <SearchForm query={query} />
         <p class={errorPageClass}>一覧を取得できませんでした。時間をおいて再読み込みしてください。</p>
       </Layout>,
       500
+    );
+  }
+
+  if (search !== null) {
+    return c.html(
+      <Layout script={CLIENT_SCRIPT}>
+        <h1 class={headerClass}>Tim</h1>
+        <SearchForm query={query} />
+        <PendingNotice count={search.pendingCount} />
+        {/* CLIENT_SCRIPT がこのフォームの要素を前提に初期化するため、
+            外すと削除・コピーのハンドラごと死ぬ。 */}
+        <UploadForm />
+        <SearchResults
+          query={query}
+          hits={search.hits}
+          keywordOnly={search.keywordOnly}
+        />
+      </Layout>
     );
   }
 
@@ -239,6 +399,14 @@ app.get("/", async (c) => {
   return c.html(
     <Layout script={CLIENT_SCRIPT}>
       <h1 class={headerClass}>Tim</h1>
+      <SearchForm query={query} />
+      <PendingNotice
+        count={
+          live.filter(
+            (file) => indexStateOf(file, CURRENT_EXTRACTOR_VERSION) !== "indexed",
+          ).length
+        }
+      />
       <UploadForm />
       <FileTable files={live} emptyMessage={emptyMessage} />
     </Layout>
