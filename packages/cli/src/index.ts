@@ -5,6 +5,7 @@ import { deleteCommand } from "./commands/delete.js";
 import { listCommand } from "./commands/list.js";
 import { loginCommand } from "./commands/login.js";
 import { logoutCommand } from "./commands/logout.js";
+import { mcpCommand } from "./commands/mcp.js";
 import { setupCommand } from "./commands/setup.js";
 import { uploadCommand } from "./commands/upload.js";
 
@@ -20,5 +21,6 @@ program.addCommand(logoutCommand);
 program.addCommand(uploadCommand);
 program.addCommand(listCommand);
 program.addCommand(deleteCommand);
+program.addCommand(mcpCommand);
 
 await program.parseAsync();

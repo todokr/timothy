@@ -80,6 +80,21 @@ body に余計なフィールドがある・形が不正なときは `400`。
 
 ---
 
+## ファイル情報・本文 API
+
+ファイルの情報と保存された本文を JSON で返す API。`tim mcp` が使う。ログイン済み（セッションまたは CLI トークン）なら
+所有者でなくても使える。親ファイルが無ければ `404`、期限切れなら `410`（期限切れの判定は版の検証より先）。
+
+| メソッド・パス | 内容 |
+|---|---|
+| `GET /files/:id` | ファイルの情報を返す。`id`・`title`・`description`・`url`（共有 URL）・`owner`（`{ email, name }`、所有者がいなければ `null`）・`expiresAt`（無期限なら `null`）・`latestVersion`・`versions`（`[{ version, createdAt, uploadedBy }]`） |
+| `GET /files/:id/content` | 保存された HTML を `{ id, version, html }` で返す。`?v=<版>` で版を指定し、省くと最新版。存在しない版・不正な `v` は `404`。`Cache-Control: no-store` |
+
+`/files/:id/content` の `html` は Cloud Storage に保存されたままの本文で、配信時に差し込まれるブリッジは含まない
+（`/s/:id/v/:n` が返す HTML とは異なる）。
+
+---
+
 ## Cloud Run デプロイ
 
 ### 前提条件
@@ -118,7 +133,7 @@ gcloud run deploy timothy-api \
   --service-account your-runtime-sa@${PROJECT}.iam.gserviceaccount.com \
   --set-env-vars FIREBASE_PROJECT_ID=${PROJECT} \
   --set-env-vars FIREBASE_STORAGE_BUCKET=your-bucket-name.appspot.com \
-  --no-allow-unauthenticated
+  --allow-unauthenticated
 ```
 
 サービスアカウントキーを明示的に使う場合は、上記に加えて
@@ -139,6 +154,8 @@ gcloud run deploy timothy-api \
 | `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth クライアントシークレット（必須） | Secret Manager |
 | `SESSION_SECRET` | セッション署名用のランダム文字列（必須） | Secret Manager |
 | `ALLOWED_EMAIL_DOMAINS` | ログインを許可するメールドメイン、カンマ区切り（必須） | 環境変数（非シークレット） |
+| `ALLOWED_IPS` | （任意）アクセスを許可する IP・CIDR のカンマ区切り。未設定なら IP 制限なし（ログインは必須） | 環境変数（非シークレット） |
+| `XFF_TRUSTED_HOPS` | （任意）サービスの前段で `X-Forwarded-For` に追記するプロキシの段数（既定 `1`）。末尾からこの数だけ遡ったエントリをクライアント IP とする。Cloud Armor / Cloud Load Balancer 経由なら `2` | 環境変数（非シークレット） |
 | `PUBLIC_BASE_URL` | （任意）API の公開 URL。コールバック URL の基準を固定する。承認済みリダイレクト URI は `<公開 URL>/auth/callback` | 環境変数（非シークレット） |
 | `PORT` | サーバーのリッスンポート（デフォルト: 3000） | Cloud Run が 8080 を自動注入 |
 
