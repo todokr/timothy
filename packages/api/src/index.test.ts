@@ -141,6 +141,17 @@ describe("authentication", () => {
     expect(res.headers.get("location")).toBe("/auth/login?next=%2Fs%2F01ABC%3Fv%3D2");
   });
 
+  it("does not redirect the body iframe to Google when the session is gone", async () => {
+    const res = await app.request("/s/01ABC/v/1");
+    expect(res.status).toBe(401);
+  });
+
+  it("still redirects the viewer page to login", async () => {
+    const res = await app.request("/s/01ABC");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/auth/login?next=%2Fs%2F01ABC");
+  });
+
   it("redirects an anonymous browser on the top page to login", async () => {
     const res = await app.request("/");
     expect(res.status).toBe(302);

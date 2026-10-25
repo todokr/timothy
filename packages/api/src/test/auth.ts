@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { AppEnv } from "../lib/auth.js";
+import type { AppEnv, AuthMethod } from "../lib/auth.js";
 import { loadAuthConfig } from "../lib/authConfig.js";
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, type SessionUser } from "../lib/session.js";
 import { signValue } from "../lib/signedCookie.js";
@@ -20,10 +20,11 @@ export function sessionCookieHeader(user: SessionUser = TEST_USER): string {
 }
 
 /** サブアプリを単体で叩くとき、requireUser を通した後と同じ状態（user がセット済み）にする */
-export function withUser<E extends AppEnv = AppEnv>(sub: Hono<E>, user: SessionUser = TEST_USER): Hono<E> {
+export function withUser<E extends AppEnv = AppEnv>(sub: Hono<E>, user: SessionUser = TEST_USER, authMethod: AuthMethod = "session"): Hono<E> {
   const wrapper = new Hono<E>();
   wrapper.use("*", async (c, next) => {
     c.set("user", user);
+    c.set("authMethod", authMethod);
     await next();
   });
   wrapper.route("/", sub);

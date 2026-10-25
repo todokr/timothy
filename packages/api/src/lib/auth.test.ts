@@ -11,7 +11,7 @@ vi.mock("./cliTokens.js", async (importOriginal) => ({
 }));
 
 import { Hono } from "hono";
-import { getUser, isAllowedEmailDomain, requireUser, redirectUri, safeNextPath, type AppEnv } from "./auth.js";
+import { getAuthMethod, getUser, isAllowedEmailDomain, requireUser, redirectUri, safeNextPath, type AppEnv } from "./auth.js";
 import { loadAuthConfig } from "./authConfig.js";
 import { SESSION_COOKIE, readSessionCookie, setSessionCookie } from "./session.js";
 import { signValue } from "./signedCookie.js";
@@ -74,7 +74,7 @@ describe("safeNextPath", () => {
   });
 });
 
-function appWith(onMissing: "redirect" | "json") {
+function appWith(onMissing: "redirect" | "json" | "frame") {
   const app = new Hono<AppEnv>();
   app.use("*", requireUser(onMissing));
   app.get("*", (c) => c.json(getUser(c)));
@@ -112,6 +112,32 @@ describe("requireUser", () => {
     expect(json.status).toBe(500);
     const redirect = await appWith("redirect").request("/x");
     expect(redirect.status).toBe(500);
+  });
+
+  it("records a session login as authMethod session", async () => {
+    const app = new Hono<AppEnv>();
+    app.use("*", requireUser("json"));
+    app.get("*", (c) => c.json({ method: getAuthMethod(c) }));
+    const res = await app.request("/x", { headers: { cookie: sessionCookieHeader() } });
+    expect(await res.json()).toEqual({ method: "session" });
+  });
+
+  it("records a CLI token login as authMethod token", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(TEST_USER);
+    const app = new Hono<AppEnv>();
+    app.use("*", requireUser("json"));
+    app.get("*", (c) => c.json({ method: getAuthMethod(c) }));
+    const res = await app.request("/x", { headers: { authorization: "Bearer tim_abc" } });
+    expect(await res.json()).toEqual({ method: "token" });
+    vi.mocked(findCliTokenUser).mockReset();
+  });
+
+  it("answers an unauthenticated frame request with a 401 page instead of a redirect", async () => {
+    const res = await appWith("frame").request("/x");
+    expect(res.status).toBe(401);
+    expect(res.headers.get("location")).toBeNull();
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(await res.text()).toContain("ログインの有効期限が切れました");
   });
 
   it("does nothing when a user is already set", async () => {
