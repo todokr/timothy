@@ -14,7 +14,7 @@ firebase emulators:start --only firestore,storage
 pnpm dev
 ```
 
-> **注意:** 共有 URL (`/s/<id>`) 以外はすべて Google ログインが必要で、ブラウザはセッション、
+> **注意:** `/health` とログイン用の `/auth/*` を除き、共有 URL (`/s/<id>`) を含むすべてで Google ログインが必要で、ブラウザはセッション、
 > CLI は `Authorization: Bearer <token>`（`tim login` で発行）で認証する。ファイルの削除と
 > ヘッダ設定は所有者に限る。下の認証用の必須環境変数が欠けていると API は起動時にエラーになる。
 > `ALLOWED_IPS` は認証とは別の IP 制限で、共有 URL にも同じように効くため、
@@ -22,7 +22,7 @@ pnpm dev
 
 ### 環境変数（ローカル）
 
-エミュレータ使用時は `FIRESTORE_EMULATOR_HOST` が設定されていれば Firebase への認証情報は不要。
+エミュレータ使用時は `FIRESTORE_EMULATOR_HOST` が設定されていれば、Firestore の読み書きに Firebase の認証情報は要らない。
 
 ```env
 FIRESTORE_EMULATOR_HOST=localhost:8080
@@ -37,6 +37,19 @@ ALLOWED_EMAIL_DOMAINS=example.com
 
 OAuth クライアントは開発用のものを作り、承認済みリダイレクト URI に
 `http://localhost:3000/auth/callback`（`PORT` に合わせる）を登録する。
+
+> **アップロードはエミュレータでは最後まで通らない。** `POST /upload` は HTML 本体の書き込み先として
+> 署名付き URL を発行するが、エミュレータ構成では署名に使う鍵が無いため 500 になる
+> （`Cannot sign data without client_email`）。`GOOGLE_APPLICATION_CREDENTIALS` にサービスアカウントの
+> 鍵（ダミーで可）を指定すれば URL は発行されるが、Storage エミュレータが署名付き URL への PUT に
+> 対応していないため、CLI の `tim upload` は `Storage upload failed 501` で失敗する
+> （Firestore のメタデータだけが残る）。手元で表示まで確かめたいときは、
+> 本体をエミュレータの REST API で直接書き込む:
+>
+> ```bash
+> curl -X POST -H "Content-Type: text/html; charset=utf-8" --data-binary @page.html \
+>   "http://localhost:9199/upload/storage/v1/b/demo-test.example.com/o?uploadType=media&name=timothy-files%2F<id>.html"
+> ```
 
 ---
 

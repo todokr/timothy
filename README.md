@@ -278,7 +278,12 @@ OAuthクライアントのIDとシークレットは手順5で作成します。
 
 ### 5. Googleログイン（OAuthクライアント）の設定
 
-APIはGoogleアカウントでのログインを必須とします。Google Cloud ConsoleのAPIとサービス →
+APIはGoogleアカウントでのログインを必須とします。クライアントを作る前に、同じプロジェクトでOAuth同意画面
+（Google Auth Platform のブランディング・対象）を作成してください。Google Workspace の組織内で使うなら、
+ユーザーの種類は **「内部」** を選びます。組織外のアカウントはGoogle側でも拒否され、Googleの審査も不要です
+（timothyが要求するスコープは `openid`・`email`・`profile` だけです）。
+
+続いてGoogle Cloud ConsoleのAPIとサービス →
 認証情報で「OAuthクライアントID」（アプリケーションの種類: ウェブアプリケーション）を作成し、
 **承認済みのリダイレクトURI** に `<公開URL>/auth/callback` を登録してください
 （例: `https://timothy-api-xxxx-an.a.run.app/auth/callback`）。
