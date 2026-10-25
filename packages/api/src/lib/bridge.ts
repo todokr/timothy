@@ -98,11 +98,12 @@ function timStateOf(target) {
   return rects.length === 0 ? "hidden" : "attached";
 }
 
-function timFind(anchor) {
+// flat は同じ照合の中で使い回す document.body の平坦化（省略時はその場で作る）。
+function timFind(anchor, flat) {
   var body = document.body;
   if (!body || !anchor || typeof anchor !== "object") return null;
   try {
-    if (anchor.type === "text") return timFindText(body, anchor);
+    if (anchor.type === "text") return timFindText(body, anchor, flat);
     if (anchor.type === "element") return timFindElement(body, anchor);
   } catch (err) {
     // 親から届いた対象の形が崩れていても、ブリッジは止めずに見つからない扱いにする。
@@ -117,14 +118,22 @@ function timElement(tag, className, parent) {
   return el;
 }
 
-function timButton(label, role, parent) {
+function timButton(label, role, parent, onClick) {
   var b = timElement("button", "button", parent);
   b.type = "button";
   b.textContent = label;
   b.setAttribute("data-role", role);
   b.hidden = true;
-  // 押しても文字選択が外れないようにする。
-  b.addEventListener("mousedown", function (e) { e.preventDefault(); });
+  // 押しても文字選択が外れないようにする。ブリッジ自身のボタンの操作はページのリスナーに見せない。
+  b.addEventListener("mousedown", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  b.addEventListener("pointerdown", function (e) { e.stopPropagation(); });
+  b.addEventListener("click", function (e) {
+    e.stopPropagation();
+    onClick();
+  });
   return b;
 }
 
@@ -142,14 +151,12 @@ function timSetupUi() {
     hover: timElement("div", "box hover", root),
     picked: timElement("div", "box picked", root),
     flash: timElement("div", "box flash", root),
-    textButton: timButton("💬 コメント", "text-comment", root),
-    pickButton: timButton("💬 この要素にコメント", "pick-comment", root)
+    textButton: timButton("💬 コメント", "text-comment", root, timComposeText),
+    pickButton: timButton("💬 この要素にコメント", "pick-comment", root, timComposeElement)
   };
   timUi.hover.hidden = true;
   timUi.picked.hidden = true;
   timUi.flash.hidden = true;
-  timUi.textButton.addEventListener("click", timComposeText);
-  timUi.pickButton.addEventListener("click", timComposeElement);
   document.documentElement.appendChild(timHost);
 }
 
@@ -299,13 +306,14 @@ function timOnMouseOver(e) {
   timPlaceBox(timUi.hover, timHovered);
 }
 
+// Escape はモード中ならモードを終えるだけ。モード外では、ページの入力欄で押したものは親に送らない。
 function timOnKeyDown(e) {
-  if (e.code === "KeyC" && e.altKey && !e.ctrlKey && !e.metaKey && !timIsEditable(e.target)) {
+  if (e.code === "KeyC" && e.altKey && !e.ctrlKey && !e.metaKey && !e.repeat && !timIsEditable(e.target)) {
     e.preventDefault();
     timPost({ type: TIM_MSG.KEY, key: "toggle-pick" });
   } else if (e.key === "Escape" && !e.isComposing) {
-    timEndPick(true);
-    timPost({ type: TIM_MSG.KEY, key: "escape" });
+    if (timPicking) timEndPick(true);
+    else if (!timIsEditable(e.target)) timPost({ type: TIM_MSG.KEY, key: "escape" });
   }
 }
 
@@ -358,9 +366,12 @@ function timRefresh(force) {
   var normal = [];
   var active = [];
   var marks = [];
+  // 文字範囲の照合ごとに本文を平坦化し直さないよう、最初に要ったときに 1 回だけ作る。
+  var flat = null;
   for (var i = 0; i < timAnchors.length; i++) {
     var entry = timAnchors[i];
-    var target = timFind(entry.anchor);
+    if (!flat && document.body && entry.anchor && entry.anchor.type === "text") flat = timFlatten(document.body);
+    var target = timFind(entry.anchor, flat);
     states[entry.id] = timStateOf(target);
     if (!target || entry.highlight !== true) continue;
     var isActive = entry.id === timActiveId;
@@ -515,9 +526,18 @@ const BRIDGE_TAG = `<script data-tim-bridge>${BRIDGE_SCRIPT}</script>`;
 // doctype より前に置くと互換モードになるため、doctype は必ず先頭に残す。
 const INSERT_AFTER = [/<head(?:\s[^>]*)?>/i, /<html(?:\s[^>]*)?>/i, /<!doctype[^>]*>/i];
 
+// HTML コメント（閉じていないものは末尾まで）。同じ長さの空白に置き換えて、位置を変えずに探索から外す。
+const HTML_COMMENT = /<!--[\s\S]*?(?:-->|$)/g;
+
+// 探すのは最初の <body・<script より前だけにする。ページのスクリプトや本文の中の "<head>" という文字列には差し込まない。
+const SEARCH_END = /<body|<script/i;
+
 export function injectBridge(html: string): string {
+  const masked = html.replace(HTML_COMMENT, (m) => " ".repeat(m.length));
+  const end = masked.search(SEARCH_END);
+  const head = end === -1 ? masked : masked.slice(0, end);
   for (const pattern of INSERT_AFTER) {
-    const m = pattern.exec(html);
+    const m = pattern.exec(head);
     if (m) {
       const at = m.index + m[0].length;
       return html.slice(0, at) + BRIDGE_TAG + html.slice(at);

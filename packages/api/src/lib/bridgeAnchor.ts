@@ -104,10 +104,11 @@ function timCommonPrefixLength(a, b) {
 
 // 同じ文字列が複数あるときは、保存した前後の文脈との一致が最も長い箇所を選ぶ。
 // どの箇所とも 1 文字も一致しなければ見つからない扱い（別の箇所に付け替えない）。
-function timFindText(root, anchor) {
+// flat には timFlatten(root) の結果を渡せる。複数の対象を続けて照合するときに平坦化を使い回すため。
+function timFindText(root, anchor, flat) {
   var quote = anchor.quote;
   if (!quote) return null;
-  var flat = timFlatten(root);
+  if (!flat) flat = timFlatten(root);
   var text = flat.text;
   var positions = [];
   for (var at = text.indexOf(quote); at !== -1; at = text.indexOf(quote, at + 1)) positions.push(at);
@@ -150,6 +151,18 @@ function timCaptureElement(root, el) {
   return { type: "element", tag: el.localName, text: timElementText(el), path: path };
 }
 
+var TIM_SKIPPED_SELECTOR = "script, style, noscript, template, [data-tim-bridge]";
+
+// 要素の文字が保存した文字と一致するか。平坦化は重いので textContent で先に絞る。
+// 平坦化は文字を減らすだけなので、textContent が短ければ一致しない。照合から外す子孫が無ければ
+// 空白を詰めた textContent が平坦化の結果と同じになるので、平坦化せずに比べられる。
+function timElementTextMatches(el, text) {
+  var raw = el.textContent || "";
+  if (raw.length < text.length) return false;
+  if (!el.querySelector(TIM_SKIPPED_SELECTOR)) return timNormalize(raw).slice(0, TIM_ELEMENT_TEXT_LENGTH) === text;
+  return timElementText(el) === text;
+}
+
 function timIsInsideSkipped(root, el) {
   for (var node = el; node && node !== root; node = node.parentElement) {
     if (timIsSkipped(node)) return true;
@@ -166,7 +179,7 @@ function timFindElement(root, anchor) {
   for (var i = 0; i < all.length; i++) {
     var el = all[i];
     if (el.localName !== anchor.tag || timIsInsideSkipped(root, el)) continue;
-    if (timElementText(el) === anchor.text) {
+    if (timElementTextMatches(el, anchor.text)) {
       found = el;
       count++;
     }

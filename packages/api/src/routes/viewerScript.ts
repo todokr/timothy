@@ -115,7 +115,10 @@ function composeProblemMessage(a) {
 }
 
 function focusResultMessage(state, shown, version) {
-  if (state === "outdated") return "v" + shown + " には引用箇所がありません。v" + version + " に切り替えると確認できます";
+  if (state === "outdated") {
+    if (version === shown) return "この版では引用箇所が見つかりません";
+    return "v" + shown + " には引用箇所がありません。v" + version + " に切り替えると確認できます";
+  }
   if (state === "hidden") return "この要素はいま表示されていません（裏のタブなど）";
   return null;
 }
@@ -162,10 +165,6 @@ ${VIEWER_HELPERS}
   var pendingAnchor = null;
   var submitting = false;
   var toastTimer = null;
-  // ブリッジはモード中の Escape で tim:pick-ended と tim:key escape を続けて送る。
-  // その escape でコメント欄まで閉じないよう、直前に終わったモードの時刻を覚えておく。
-  var PICK_ESCAPE_WINDOW = 100;
-  var pickEndedAt = -Infinity;
 
   // 版を選んだら ?v=<N> へ移る。最新版を選んだときも ?v=<latest> にする。
   versionSelect.addEventListener("change", function (e) {
@@ -448,10 +447,10 @@ ${VIEWER_HELPERS}
     post({ type: TIM_MSG.SET_PICK, on: on });
   }
 
-  // pickJustEnded は、同じ Escape でブリッジ側のモードが終わった直後であることを表す。
-  function handleEscape(pickJustEnded) {
+  // 親画面での Escape。モード中ならモードを終え、そうでなければコメント欄を閉じる。
+  function handleEscape() {
     if (picking) setPicking(false);
-    else if (!composer.hidden && !pickJustEnded) closeComposer();
+    else if (!composer.hidden) closeComposer();
   }
 
   pickToggle.addEventListener("click", function () { setPicking(!picking); });
@@ -459,11 +458,11 @@ ${VIEWER_HELPERS}
   window.addEventListener("keydown", function (e) {
     if (e.isComposing || e.keyCode === 229) return;
     // ⌥+C は macOS では key が "ç" になるので code で見る（ブリッジと同じ条件）。
-    if (e.code === "KeyC" && e.altKey && !e.ctrlKey && !e.metaKey && !isEditable(e.target)) {
+    if (e.code === "KeyC" && e.altKey && !e.ctrlKey && !e.metaKey && !e.repeat && !isEditable(e.target)) {
       e.preventDefault();
       setPicking(!picking);
     } else if (e.key === "Escape") {
-      handleEscape(false);
+      handleEscape();
     }
   });
 
@@ -508,9 +507,9 @@ ${VIEWER_HELPERS}
       else openComposer(data.anchor);
     } else if (data.type === TIM_MSG.KEY) {
       if (data.key === "toggle-pick") setPicking(!picking);
-      else if (data.key === "escape") handleEscape(Date.now() - pickEndedAt <= PICK_ESCAPE_WINDOW);
+      // 本体からの Escape はモードを終えるだけ。コメント欄を閉じたり書きかけを消したりはしない。
+      else if (data.key === "escape" && picking) setPicking(false);
     } else if (data.type === TIM_MSG.PICK_ENDED) {
-      pickEndedAt = Date.now();
       picking = false;
       pickToggle.setAttribute("aria-pressed", "false");
     } else if (data.type === TIM_MSG.OPEN_LINK) {

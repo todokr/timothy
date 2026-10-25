@@ -165,6 +165,10 @@ describe("viewer helpers", () => {
     expect(h.focusResultMessage("hidden", 3, 1)).toBe("この要素はいま表示されていません（裏のタブなど）");
     expect(h.focusResultMessage("attached", 3, 1)).toBeNull();
   });
+
+  it("does not suggest switching versions when the comment is on the shown version", () => {
+    expect(h.focusResultMessage("outdated", 2, 2)).toBe("この版では引用箇所が見つかりません");
+  });
 });
 
 // 外枠ページの DOM を組み、スクリプトを実際に動かして iframe とのやり取りを確かめる。
@@ -378,16 +382,30 @@ describe("viewer script in a page", () => {
     expect(button.getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("keeps the composer open when the same Escape ended pick mode in the frame", async () => {
+  it("never closes the composer or drops the draft on an Escape from the frame", async () => {
     page();
     run();
     await settle();
     fromFrame({ type: "tim:ready" });
     fromFrame({ type: "tim:compose", anchor: { type: "text", quote: "選んだ文", prefix: "", suffix: "" } });
-    document.getElementById("pick-toggle")!.click();
-    // ブリッジはモード中の Escape で pick-ended と escape を続けて送る
-    fromFrame({ type: "tim:pick-ended" });
+    const text = document.getElementById("composer-text") as HTMLTextAreaElement;
+    text.value = "書きかけ";
+    text.dispatchEvent(new Event("input", { bubbles: true }));
     fromFrame({ type: "tim:key", key: "escape" });
+    expect(document.getElementById("composer")!.hidden).toBe(false);
+    expect(text.value).toBe("書きかけ");
+  });
+
+  it("ends pick mode first, then closes the composer, on Escape in the parent", async () => {
+    page();
+    run();
+    await settle();
+    fromFrame({ type: "tim:ready" });
+    fromFrame({ type: "tim:compose", anchor: { type: "text", quote: "選んだ文", prefix: "", suffix: "" } });
+    const button = document.getElementById("pick-toggle")!;
+    button.click();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(button.getAttribute("aria-pressed")).toBe("false");
     expect(document.getElementById("composer")!.hidden).toBe(false);
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(document.getElementById("composer")!.hidden).toBe(true);
@@ -404,6 +422,16 @@ describe("viewer script in a page", () => {
       new KeyboardEvent("keydown", { code: "KeyC", key: "ç", altKey: true, bubbles: true }),
     );
     expect(button.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("ignores Alt+C key repeats in the parent", async () => {
+    page();
+    run();
+    await settle();
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { code: "KeyC", key: "ç", altKey: true, repeat: true, bubbles: true }),
+    );
+    expect(document.getElementById("pick-toggle")!.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("does not enter pick mode when scripts are not allowed", async () => {

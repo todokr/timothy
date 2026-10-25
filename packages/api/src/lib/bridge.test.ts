@@ -22,6 +22,20 @@ describe("injectBridge", () => {
     const html = "<!doctype html><html><head><title>$&</title></head><body>x</body></html>";
     expect(injectBridge(html).replace(/<script data-tim-bridge>[\s\S]*?<\/script>/, "")).toBe(html);
   });
+
+  it("does not look for <head> inside the page's scripts or body", () => {
+    const html = `<html><body><script>var s="<head>";</script></body></html>`;
+    const out = injectBridge(html);
+    expect(out).toMatch(/^<html><script data-tim-bridge>/);
+    expect(out).toContain(`<script>var s="<head>";</script>`);
+    expect(out.replace(/<script data-tim-bridge>[\s\S]*?<\/script>/, "")).toBe(html);
+  });
+
+  it("does not put the bridge inside a leading HTML comment", () => {
+    const out = injectBridge("<!-- <head> --><html><head><title>t</title></head><body>x</body></html>");
+    expect(out).toMatch(/^<!-- <head> --><html><head><script data-tim-bridge>/);
+    expect(injectBridge("<!doctype html><!-- <head> --><p>x</p>")).toMatch(/^<!doctype html><script data-tim-bridge>/);
+  });
 });
 
 describe("BRIDGE_SCRIPT", () => {
@@ -135,6 +149,34 @@ describe("bridge interaction", () => {
     expect(button.hidden).toBe(true);
   });
 
+  it("keeps clicks on its own buttons from reaching the page's listeners", () => {
+    body(`<ul><li id="one">一</li></ul>`);
+    const onDocument = vi.fn();
+    const onWindow = vi.fn();
+    const types = ["click", "mousedown", "pointerdown"];
+    for (const t of types) {
+      document.addEventListener(t, onDocument);
+      window.addEventListener(t, onWindow);
+    }
+    try {
+      fromParent({ tim: 1, type: "tim:set-pick", on: true });
+      document.getElementById("one")!.click();
+      const button = shadow().querySelector<HTMLButtonElement>("[data-role=pick-comment]")!;
+      for (const t of ["pointerdown", "mousedown"]) {
+        button.dispatchEvent(new MouseEvent(t, { bubbles: true, composed: true, cancelable: true }));
+      }
+      button.click();
+      expect(lastPosted("tim:compose")).toBeDefined();
+      expect(onDocument).not.toHaveBeenCalled();
+      expect(onWindow).not.toHaveBeenCalled();
+    } finally {
+      for (const t of types) {
+        document.removeEventListener(t, onDocument);
+        window.removeEventListener(t, onWindow);
+      }
+    }
+  });
+
   it("does not offer to comment on the body itself", () => {
     body(`<p>x</p>`);
     fromParent({ tim: 1, type: "tim:set-pick", on: true });
@@ -160,15 +202,28 @@ describe("bridge interaction", () => {
     expect(posted().some((m) => m.type === "tim:key")).toBe(false);
   });
 
-  it("ends picking on Escape and forwards the key", () => {
+  it("ignores Alt+C key repeats", () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyC", altKey: true, repeat: true }));
+    expect(posted().some((m) => m.type === "tim:key")).toBe(false);
+  });
+
+  it("ends picking on Escape without forwarding the key", () => {
     fromParent({ tim: 1, type: "tim:set-pick", on: true });
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape" }));
-    expect(posted()).toContainEqual({ tim: 1, type: "tim:pick-ended" });
-    expect(posted()).toContainEqual({ tim: 1, type: "tim:key", key: "escape" });
+    expect(posted()).toEqual([{ tim: 1, type: "tim:pick-ended" }]);
+  });
 
-    postMessage.mockClear();
+  it("forwards Escape when not picking", () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape" }));
     expect(posted()).toEqual([{ tim: 1, type: "tim:key", key: "escape" }]);
+  });
+
+  it("does not forward Escape typed in an input of the page", () => {
+    body(`<input id="q">`);
+    const input = document.getElementById("q")!;
+    input.focus();
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true }));
+    expect(posted()).toEqual([]);
   });
 
   it("ignores messages that do not come from the parent", () => {

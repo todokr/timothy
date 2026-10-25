@@ -4,13 +4,18 @@ import { BRIDGE_ANCHOR_LIB } from "./bridgeAnchor.js";
 
 type Lib = {
   timCaptureText: (root: Element, range: Range) => { type: "text"; quote: string; prefix: string; suffix: string } | null;
-  timFindText: (root: Element, anchor: { type: "text"; quote: string; prefix: string; suffix: string }) => Range | null;
+  timFindText: (
+    root: Element,
+    anchor: { type: "text"; quote: string; prefix: string; suffix: string },
+    flat?: unknown,
+  ) => Range | null;
+  timFlatten: (root: Element) => unknown;
   timCaptureElement: (root: Element, el: Element) => { type: "element"; tag: string; text: string; path: number[] };
   timFindElement: (root: Element, anchor: { type: "element"; tag: string; text: string; path: number[] }) => Element | null;
 };
 
 const lib = new Function(
-  BRIDGE_ANCHOR_LIB + "; return { timCaptureText, timFindText, timCaptureElement, timFindElement };",
+  BRIDGE_ANCHOR_LIB + "; return { timCaptureText, timFindText, timFlatten, timCaptureElement, timFindElement };",
 )() as Lib;
 
 function body(html: string) {
@@ -51,6 +56,27 @@ describe("bridge anchor lib", () => {
   it("treats a duplicated quote with no matching context as outdated", () => {
     body(`<p>A 日次 B</p><p>C 日次 D</p>`);
     expect(lib.timFindText(document.body, { type: "text", quote: "日次", prefix: "X", suffix: "Y" })).toBeNull();
+  });
+
+  it("finds the same range with a precomputed flattening of the root", () => {
+    body(`<p>手動で 日次 実行する</p><p>CronJob が <b>日次</b> 実行する</p>`);
+    const anchor = { type: "text" as const, quote: "日次 実行", prefix: "CronJob が ", suffix: "する" };
+    const plain = lib.timFindText(document.body, anchor)!;
+    const reused = lib.timFindText(document.body, anchor, lib.timFlatten(document.body))!;
+    expect([reused.startContainer, reused.startOffset, reused.endContainer, reused.endOffset]).toEqual([
+      plain.startContainer,
+      plain.startOffset,
+      plain.endContainer,
+      plain.endOffset,
+    ]);
+    expect(reused.startContainer.parentElement!.localName).toBe("b");
+  });
+
+  it("matches an element whose text includes skipped descendants", () => {
+    body(`<table><tr><td><script>var x = 1;</script>日次</td><td>週次</td></tr></table>`);
+    const td = document.querySelectorAll("td")[0];
+    const anchor = { type: "element" as const, tag: "td", text: "日次", path: [9] };
+    expect(lib.timFindElement(document.body, anchor)).toBe(td);
   });
 
   it("ignores context when the quote is unique", () => {
