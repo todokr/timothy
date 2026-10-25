@@ -72,7 +72,7 @@ export function isExpired(iso: string | null, nowMs: number): boolean {
 // ブラウザが互換モード (quirks mode) で描画するのを防ぐ。
 const DOCTYPE = raw("<!DOCTYPE html>");
 
-function Layout(props: { children: unknown; script?: string }) {
+export function Layout(props: { children: unknown; script?: string }) {
   return (
     <>
       {DOCTYPE}

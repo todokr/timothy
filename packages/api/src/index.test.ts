@@ -7,13 +7,15 @@ vi.mock("./lib/firebase.js", () => ({
 
 import app from "./index.js";
 import { db } from "./lib/firebase.js";
+import { signValue } from "./lib/signedCookie.js";
+import { TEST_USER, sessionCookieHeader } from "./test/auth.js";
 
 const DENIED_IP = "203.0.113.9";
 
-function request(path: string, method = "GET") {
+function request(path: string, method = "GET", headers: Record<string, string> = {}) {
   return app.request(path, {
     method,
-    headers: { "x-forwarded-for": DENIED_IP },
+    headers: { "x-forwarded-for": DENIED_IP, ...headers },
   });
 }
 
@@ -53,6 +55,12 @@ describe("IP allowlist coverage", () => {
     expect((await request("/files/01ABC/headers", "PUT")).status).toBe(403);
   });
 
+  it("blocks the auth endpoints", async () => {
+    expect((await request("/auth/login")).status).toBe(403);
+    expect((await request("/auth/callback")).status).toBe(403);
+    expect((await request("/auth/logout", "POST")).status).toBe(403);
+  });
+
   it("does not block the health endpoint", async () => {
     expect((await request("/health")).status).toBe(200);
   });
@@ -76,7 +84,7 @@ describe("without ALLOWED_IPS", () => {
   });
 
   it("does not block the file list endpoint", async () => {
-    const res = await request("/files");
+    const res = await request("/files", "GET", { cookie: sessionCookieHeader() });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ files: [] });
   });
@@ -88,8 +96,82 @@ describe("without ALLOWED_IPS", () => {
   it("mounts the header settings endpoint", async () => {
     const res = await app.request("/files/01ABC/headers", {
       method: "PUT",
-      headers: { "Content-Type": "text/plain", "Sec-Fetch-Site": "same-origin" },
+      headers: {
+        "Content-Type": "text/plain",
+        "Sec-Fetch-Site": "same-origin",
+        cookie: sessionCookieHeader(),
+      },
     });
     expect(res.status).toBe(415);
+  });
+});
+
+describe("authentication", () => {
+  beforeEach(() => {
+    delete process.env.ALLOWED_IPS;
+  });
+
+  it("redirects an anonymous browser on /s/:id to login, keeping the query", async () => {
+    const res = await app.request("/s/01ABC?v=2");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/auth/login?next=%2Fs%2F01ABC%3Fv%3D2");
+  });
+
+  it("redirects an anonymous browser on the top page to login", async () => {
+    const res = await app.request("/");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/auth/login?next=%2F");
+  });
+
+  it("redirects the header edit page rather than returning JSON", async () => {
+    const res = await app.request("/files/01ABC/headers/edit");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/auth/login?next=%2Ffiles%2F01ABC%2Fheaders%2Fedit");
+  });
+
+  // redirect と json の requireUser が両方当たるパス。ログイン済みならハンドラまで届くこと
+  it("lets a signed-in user reach the header edit page", async () => {
+    vi.mocked(db.collection).mockReturnValue({
+      doc: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ exists: false }) }),
+    } as unknown as ReturnType<typeof db.collection>);
+    const res = await app.request("/files/01ABC/headers/edit", {
+      headers: { cookie: sessionCookieHeader() },
+    });
+    expect(res.status).toBe(404);
+    expect(await res.text()).toContain("指定されたファイルが見つかりません");
+    vi.mocked(db.collection).mockReset();
+  });
+
+  it.each([
+    ["/files", "GET"],
+    ["/upload", "POST"],
+    ["/files/01ABC", "DELETE"],
+    ["/files/01ABC/headers", "PUT"],
+  ])("returns 401 JSON for anonymous %s %s", async (path, method) => {
+    const res = await app.request(path, { method });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Unauthorized" });
+  });
+
+  it("keeps /health open", async () => {
+    expect((await app.request("/health")).status).toBe(200);
+  });
+
+  it("leaves /auth/login reachable without a session", async () => {
+    const res = await app.request("/auth/login");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toMatch(/^https:\/\/accounts\.google\.com\//);
+  });
+
+  it("rejects a session cookie signed with another secret", async () => {
+    const forged = signValue(TEST_USER, "another-secret", 60);
+    const res = await app.request("/files", { headers: { cookie: `tim_session=${forged}` } });
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects an expired session cookie", async () => {
+    const expired = signValue(TEST_USER, "test-session-secret", 60, Date.now() - 120_000);
+    const res = await app.request("/files", { headers: { cookie: `tim_session=${expired}` } });
+    expect(res.status).toBe(401);
   });
 });
