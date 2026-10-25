@@ -65,12 +65,17 @@ export const uploadCommand = new Command("upload")
       process.exit(1);
     }
 
-    const result = await apiUpload(
-      { title, description, ttlDays: ttl.ttlDays },
-      html,
-      config as Required<typeof config>
-    );
-    process.stdout.write(
-      `${color("✓", green, bold)} Uploaded: ${result.url}  (expires: ${formatExpiry(result.expiresAt)})\n`
-    );
+    try {
+      const result = await apiUpload(
+        { title, description, ttlDays: ttl.ttlDays },
+        html,
+        config as Required<typeof config>
+      );
+      process.stdout.write(
+        `${color("✓", green, bold)} Uploaded: ${result.url}  (expires: ${formatExpiry(result.expiresAt)})\n`
+      );
+    } catch (err) {
+      process.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    }
   });

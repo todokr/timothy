@@ -13,7 +13,10 @@ vi.mock("../lib/firebase.js", () => ({
 
 import { listFiles } from "../lib/files.js";
 import { db } from "../lib/firebase.js";
-import app, { formatJst, isExpired } from "./web.js";
+import webApp, { formatJst, isExpired } from "./web.js";
+import { TEST_USER, withUser } from "../test/auth.js";
+
+const app = withUser(webApp);
 
 function entry(overrides: Record<string, unknown> = {}) {
   return {
@@ -23,6 +26,7 @@ function entry(overrides: Record<string, unknown> = {}) {
     url: "http://localhost/s/01ABC",
     expiresAt: "2099-01-01T00:00:00.000Z",
     createdAt: "2026-08-07T03:04:00.000Z",
+    owner: null,
     ...overrides,
   };
 }
@@ -332,12 +336,12 @@ describe("CLIENT_SCRIPT", () => {
 });
 
 describe("GET /files/:id/headers/edit", () => {
-  function mockDoc(exists: boolean, responseHeaders?: unknown) {
+  function mockDoc(exists: boolean, responseHeaders?: unknown, ownerEmail?: string) {
     vi.mocked(db.collection).mockReturnValue({
       doc: vi.fn().mockReturnValue({
         get: vi.fn().mockResolvedValue({
           exists,
-          data: () => ({ title: "Monthly Report", responseHeaders }),
+          data: () => ({ title: "Monthly Report", responseHeaders, ownerEmail }),
         }),
       }),
     } as unknown as ReturnType<typeof db.collection>);
@@ -345,12 +349,35 @@ describe("GET /files/:id/headers/edit", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.ALLOW_UNSANDBOXED_CONTENT;
   });
 
   it("returns 404 for an unknown id", async () => {
     mockDoc(false);
     expect((await app.request("/files/01MISSING/headers/edit")).status).toBe(404);
+  });
+
+  // 編集フォームを見せておいて PUT で弾くと、押せるのに必ず失敗する画面になる
+  it("returns 403 without a form for someone else's file", async () => {
+    mockDoc(true, undefined, "other@example.com");
+    const res = await app.request("/files/01ABC/headers/edit");
+    expect(res.status).toBe(403);
+    expect(await res.text()).not.toContain('id="settings-form"');
+  });
+
+  it("shows the form to the owner", async () => {
+    mockDoc(true, undefined, TEST_USER.email);
+    const res = await app.request("/files/01ABC/headers/edit");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('id="settings-form"');
+  });
+
+  // 旧値 "public" は配信時に private 扱いなので、フォームも private を選んでおく。
+  // 未選択のまま他の項目だけ保存すると、キャッシュ設定が黙って消えてしまう
+  it("preselects private when the stored cacheControl is the legacy public", async () => {
+    mockDoc(true, { cacheControl: "public" });
+    const html = await (await app.request("/files/01ABC/headers/edit")).text();
+    expect(html).toMatch(/<option[^>]*value="private"[^>]*selected/);
+    expect(html).not.toMatch(/<option[^>]*value="no-store"[^>]*selected/);
   });
 
   // The page shows the policy actually being sent rather than describing it, so
@@ -402,22 +429,16 @@ describe("GET /files/:id/headers/edit", () => {
     expect(html).toContain("マウスカーソルを固定");
   });
 
-  // The operator opts in at deploy time. Until then the option must not exist
-  // on the page at all — a disabled control still invites someone to look for
-  // a way around it.
-  it("omits allow-same-origin unless the operator enabled it", async () => {
-    mockDoc(true, undefined);
-    const html = await (await app.request("/files/01ABC/headers/edit")).text();
-    expect(html).not.toContain("allow-same-origin");
-  });
-
-  it("offers allow-same-origin with its consequence spelled out once enabled", async () => {
+  // The option is gone from the vocabulary; the old env var must not bring it back.
+  it("never offers allow-same-origin, even with the old env var set", async () => {
     process.env.ALLOW_UNSANDBOXED_CONTENT = "true";
-    mockDoc(true, undefined);
-    const html = await (await app.request("/files/01ABC/headers/edit")).text();
-
-    expect(html).toContain("allow-same-origin");
-    expect(html).toContain("全ファイルの一覧取得・閲覧・削除");
+    try {
+      mockDoc(true, undefined);
+      const html = await (await app.request("/files/01ABC/headers/edit")).text();
+      expect(html).not.toContain("allow-same-origin");
+    } finally {
+      delete process.env.ALLOW_UNSANDBOXED_CONTENT;
+    }
   });
 });
 
@@ -426,5 +447,77 @@ describe("the file list", () => {
     vi.mocked(listFiles).mockResolvedValue([entry()]);
     const html = await (await app.request("/")).text();
     expect(html).toContain('href="/files/01ABC/headers/edit"');
+  });
+});
+
+describe("ownership in the file list", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const other = { email: "other@example.com", name: "Other Person" };
+
+  it("shows the owner column and hides delete / header buttons on others' files", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry({ id: "01OTHER", owner: other })]);
+    const html = await (await app.request("/")).text();
+
+    expect(html).toContain("<th>所有者</th>");
+    expect(html).toContain("Other Person");
+    expect(html).toContain('title="other@example.com"');
+    expect(html).not.toContain('data-delete-id="01OTHER"');
+    expect(html).not.toContain("/files/01OTHER/headers/edit");
+    // 閲覧と共有は誰でもできる
+    expect(html).toContain(">開く<");
+  });
+
+  it("shows delete / header buttons on your own files", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "01MINE", owner: { email: TEST_USER.email.toUpperCase(), name: TEST_USER.name } }),
+    ]);
+    const html = await (await app.request("/")).text();
+
+    expect(html).toContain('data-delete-id="01MINE"');
+    expect(html).toContain('href="/files/01MINE/headers/edit"');
+  });
+
+  it("shows - and keeps the buttons for a legacy file without an owner", async () => {
+    vi.mocked(listFiles).mockResolvedValue([entry({ id: "01LEGACY", owner: null })]);
+    const html = await (await app.request("/")).text();
+
+    expect(html).toContain(">-</td>");
+    expect(html).toContain('data-delete-id="01LEGACY"');
+  });
+
+  it("lists everyone's files by default and passes no owner filter", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    await app.request("/");
+    expect(listFiles).toHaveBeenCalledWith("http://localhost", undefined);
+  });
+
+  it("shows only the caller's files with ?mine=1", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/?mine=1")).text();
+
+    expect(listFiles).toHaveBeenCalledWith("http://localhost", { ownerEmail: TEST_USER.email });
+    expect(html).toContain('href="/"');
+    expect(html).toContain("全員のファイル");
+  });
+
+  it("ignores other values of mine", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/?mine=0")).text();
+
+    expect(listFiles).toHaveBeenCalledWith("http://localhost", undefined);
+    expect(html).toContain('href="/?mine=1"');
+    expect(html).toContain("自分のファイルだけ");
+  });
+
+  it("shows the logged-in email and a logout form", async () => {
+    vi.mocked(listFiles).mockResolvedValue([]);
+    const html = await (await app.request("/")).text();
+
+    expect(html).toContain(TEST_USER.email);
+    expect(html).toMatch(/<form[^>]*method="post"[^>]*action="\/auth\/logout"/);
+    expect(html).toContain("ログアウト");
   });
 });

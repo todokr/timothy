@@ -5,14 +5,21 @@ import { formatExpiry } from "../lib/expiry.js";
 
 export const listCommand = new Command("list")
   .description("List uploaded files")
-  .action(async () => {
+  .option("--mine", "Show only files you own")
+  .action(async (opts: { mine?: boolean }) => {
     const config = await readConfig();
     if (!config.apiEndpoint) {
       process.stderr.write("Error: run `tim setup` first\n");
       process.exit(1);
     }
 
-    const files = await apiList(config as Required<typeof config>);
+    let files;
+    try {
+      files = await apiList(config as Required<typeof config>, { mine: opts.mine });
+    } catch (err) {
+      process.stderr.write(`Error: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    }
     if (files.length === 0) {
       process.stdout.write("No files uploaded yet.\n");
       return;
@@ -21,13 +28,16 @@ export const listCommand = new Command("list")
     const urlW = Math.max("URL".length, ...files.map((f) => f.url.length)) + 2;
     const titleW = 32;
     const dateW = 12;
-    const header = `${"URL".padEnd(urlW)}${"TITLE".padEnd(titleW)}${"CREATED".padEnd(dateW)}EXPIRES`;
+    // 所有者なし（認証導入前のファイル）は "-"
+    const ownerOf = (f: (typeof files)[number]) => f.owner?.email ?? "-";
+    const ownerW = Math.max("OWNER".length, ...files.map((f) => ownerOf(f).length)) + 2;
+    const header = `${"URL".padEnd(urlW)}${"TITLE".padEnd(titleW)}${"OWNER".padEnd(ownerW)}${"CREATED".padEnd(dateW)}EXPIRES`;
     process.stdout.write(`${header}\n`);
     for (const f of files) {
       const created = f.createdAt.slice(0, 10);
       const expires = formatExpiry(f.expiresAt);
       const title = f.title.length > titleW - 2 ? `${f.title.slice(0, titleW - 3)}…` : f.title;
-      const row = `${f.url.padEnd(urlW)}${title.padEnd(titleW)}${created.padEnd(dateW)}${expires}`;
+      const row = `${f.url.padEnd(urlW)}${title.padEnd(titleW)}${ownerOf(f).padEnd(ownerW)}${created.padEnd(dateW)}${expires}`;
       process.stdout.write(`${row}\n`);
     }
   });

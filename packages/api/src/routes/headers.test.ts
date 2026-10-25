@@ -5,13 +5,16 @@ vi.mock("../lib/firebase.js", () => ({
 }));
 
 import { FieldValue } from "firebase-admin/firestore";
-import app from "./headers.js";
+import headersApp from "./headers.js";
+import { withUser } from "../test/auth.js";
+
+const app = withUser(headersApp);
 import { db } from "../lib/firebase.js";
 
-function mockDoc(exists: boolean, responseHeaders?: unknown) {
+function mockDoc(exists: boolean, responseHeaders?: unknown, ownerEmail?: string) {
   const updateMock = vi.fn().mockResolvedValue(undefined);
   const docRef = {
-    get: vi.fn().mockResolvedValue({ exists, data: () => ({ responseHeaders }) }),
+    get: vi.fn().mockResolvedValue({ exists, data: () => ({ responseHeaders, ownerEmail }) }),
     update: updateMock,
   };
   vi.mocked(db.collection).mockReturnValue({
@@ -46,6 +49,23 @@ describe("PUT /files/:id/headers", () => {
     expect(updateMock).toHaveBeenCalledWith({
       responseHeaders: { allowedSources: { script: ["https://cdn.example.com"] } },
     });
+  });
+
+  it("refuses to change headers of someone else's file", async () => {
+    const { updateMock } = mockDoc(true, undefined, "other@example.com");
+    const res = await put("01ABC", { cacheControl: "no-store" });
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Forbidden" });
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
+  it("lets the owner change headers", async () => {
+    const { updateMock } = mockDoc(true, undefined, "TESTER@example.com");
+    const res = await put("01ABC", { cacheControl: "no-store" });
+
+    expect(res.status).toBe(200);
+    expect(updateMock).toHaveBeenCalledOnce();
   });
 
   it("returns 404 for an unknown id", async () => {

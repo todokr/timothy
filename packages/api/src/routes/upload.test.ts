@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import app, { parseUploadRequest } from "./upload.js";
+import uploadApp, { parseUploadRequest } from "./upload.js";
+import { TEST_USER, withUser } from "../test/auth.js";
+
+const app = withUser(uploadApp);
 
 vi.mock("../lib/firebase.js", () => ({
   db: {
@@ -203,6 +206,19 @@ describe("POST /upload", () => {
     const expiresAt = savedData.expiresAt as Date;
     const diffDays = Math.round((expiresAt.getTime() - before.getTime()) / (1000 * 60 * 60 * 24));
     expect(diffDays).toBe(validBody.ttlDays);
+  });
+
+  it("records the uploader as owner", async () => {
+    const setMock = vi.fn().mockResolvedValue(undefined);
+    const collectionMock = { doc: vi.fn().mockReturnValue({ set: setMock }) };
+    vi.mocked(db.collection).mockReturnValue(collectionMock as unknown as ReturnType<typeof db.collection>);
+
+    const res = await fetchDirect(makeRequest({ title: "T", description: "D", ttlDays: 1 }));
+
+    expect(res.status).toBe(200);
+    const savedData = setMock.mock.calls[0][0] as Record<string, unknown>;
+    expect(savedData.ownerEmail).toBe(TEST_USER.email);
+    expect(savedData.ownerName).toBe(TEST_USER.name);
   });
 
   it("stores expiresAt: null and returns it when ttlDays is null", async () => {

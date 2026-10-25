@@ -13,10 +13,14 @@ export function isJsonContentType(header: string | undefined): boolean {
 /**
  * ブラウザの管理画面から来たリクエストかどうか。
  *
- * **セキュリティ制御ではなく摩擦。** 認証が無いので `curl` からの操作を
- * 本当に防ぐことはできず、`Sec-Fetch-Site` は詐称できる。ヘッダを送らない
- * `curl` / `node-fetch` を弾くことで、設定内容を理解しないまま
- * スクリプトや AI エージェントに変更されるのを防ぐのが目的。
+ * 2 つの役割がある。
+ * - `POST /auth/cli` では CSRF の関門。ブラウザは `Sec-Fetch-Site` を他サイトから
+ *   詐称できないため、別サイトのフォームから CLI トークンを発行させる攻撃を止められる。
+ * - 管理画面の API では、ヘッダを送らない `curl` / `node-fetch` を弾く摩擦。
+ *   設定内容を理解しないままスクリプトや AI エージェントに変更されるのを防ぐ。
+ *
+ * ブラウザ以外のクライアントは `Sec-Fetch-Site` を自由に詐称できるため、
+ * これだけで非ブラウザからの操作を防ぐことはできない。認証は別途 requireUser が担う。
  *
  * `Sec-Fetch-Mode` は条件に含めない。値は呼び出し側の `fetch()` の書き方に
  * 依存する（`mode: 'same-origin'` なら same-origin、既定なら cors）ため、

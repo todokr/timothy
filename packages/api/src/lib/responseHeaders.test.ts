@@ -5,7 +5,6 @@ import {
   buildHeaders,
   parseSettings,
   riskLevel,
-  unsandboxedContentAllowed,
   validateOrigin,
 } from "./responseHeaders.js";
 
@@ -59,8 +58,8 @@ describe("parseSettings", () => {
     expect(result).toEqual({ ok: true, data: {} });
   });
 
-  // 運用者が許可していない状態では語彙に現れない。
-  it("既定では allow-same-origin を弾く", () => {
+  // 語彙に存在しない。
+  it("allow-same-origin を弾く", () => {
     const result = parseSettings({ sandbox: ["allow-scripts", "allow-same-origin"] });
     expect(result.ok).toBe(false);
   });
@@ -169,10 +168,7 @@ describe("buildHeaders", () => {
 
   // max-age が無いとブラウザや中間キャッシュがヒューリスティックに期間を決め、
   // TTL 経過後もキャッシュから配信されうる。
-  it("public / private に有効期限までの max-age を付ける", () => {
-    expect(buildHeaders({ cacheControl: "public" }, expiresAt, nowMs).cacheControl).toBe(
-      "public, max-age=604800"
-    );
+  it("private に有効期限までの max-age を付ける", () => {
     expect(buildHeaders({ cacheControl: "private" }, expiresAt, nowMs).cacheControl).toBe(
       "private, max-age=604800"
     );
@@ -186,10 +182,7 @@ describe("buildHeaders", () => {
 
   // 無期限には残り秒数が無い。max-age を省くとキャッシュ期間がヒューリスティックに
   // 決まり、削除後の残留期間が読めなくなるので固定値を入れる。
-  it("無期限のとき public / private に max-age=86400 を付ける", () => {
-    expect(buildHeaders({ cacheControl: "public" }, null, nowMs).cacheControl).toBe(
-      "public, max-age=86400"
-    );
+  it("無期限のとき private に max-age=86400 を付ける", () => {
     expect(buildHeaders({ cacheControl: "private" }, null, nowMs).cacheControl).toBe(
       "private, max-age=86400"
     );
@@ -201,37 +194,43 @@ describe("buildHeaders", () => {
 
   it("期限切れでも max-age が負にならない", () => {
     const past = new Date("2025-01-01T00:00:00Z");
-    expect(buildHeaders({ cacheControl: "public" }, past, nowMs).cacheControl).toBe(
-      "public, max-age=0"
+    expect(buildHeaders({ cacheControl: "private" }, past, nowMs).cacheControl).toBe(
+      "private, max-age=0"
     );
   });
 });
 
-describe("ALLOW_UNSANDBOXED_CONTENT ゲート", () => {
+describe("allow-same-origin の廃止", () => {
   afterEach(() => {
     delete process.env.ALLOW_UNSANDBOXED_CONTENT;
   });
 
-  it("許可されていれば allow-same-origin を保存できる", () => {
+  // ログインセッションを持つ閲覧者の権限で同一オリジンの JS が動くのを防ぐ。
+  // 旧環境変数が残っていても復活させない。
+  it("never offers allow-same-origin, even with the old env var set", () => {
     process.env.ALLOW_UNSANDBOXED_CONTENT = "true";
-    expect(parseSettings({ sandbox: ["allow-scripts", "allow-same-origin"] }).ok).toBe(true);
-  });
-
-  it("true 以外の値では許可しない", () => {
-    process.env.ALLOW_UNSANDBOXED_CONTENT = "1";
-    expect(unsandboxedContentAllowed()).toBe(false);
     expect(availableSandboxTokens()).not.toContain("allow-same-origin");
   });
 
-  // ゲートが書き込み時だけだと、許可を外しても保存済みの設定が配信され続ける。
-  // 「運用者が許可しない限りこの穴は存在しない」を成立させるには読み取り側も要る。
-  it("許可を外すと保存済みの allow-same-origin も配信されなくなる", () => {
+  it("rejects allow-same-origin in new settings", () => {
     process.env.ALLOW_UNSANDBOXED_CONTENT = "true";
-    const stored = parseSettings({ sandbox: ["allow-scripts", "allow-same-origin"] });
-    expect(stored.ok && buildCsp(stored.data)).toContain("allow-same-origin");
+    expect(parseSettings({ sandbox: ["allow-scripts", "allow-same-origin"] }).ok).toBe(false);
+  });
 
-    delete process.env.ALLOW_UNSANDBOXED_CONTENT;
-    expect(stored.ok && buildCsp(stored.data)).not.toContain("allow-same-origin");
+  it("drops allow-same-origin from stored settings when serving", () => {
+    const stored = { sandbox: ["allow-scripts", "allow-same-origin"] } as never;
+    const { csp } = buildHeaders(stored, null);
+    expect(csp).not.toContain("allow-same-origin");
+  });
+
+  it("rejects cacheControl public in new settings", () => {
+    expect(parseSettings({ cacheControl: "public" }).ok).toBe(false);
+  });
+
+  // 共有キャッシュに認証済みの中身を載せないため、保存済みの public は private に倒す。
+  it("serves stored cacheControl public as private", () => {
+    const { cacheControl } = buildHeaders({ cacheControl: "public" as never }, null);
+    expect(cacheControl).toMatch(/^private/);
   });
 });
 

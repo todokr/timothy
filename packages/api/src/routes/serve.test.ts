@@ -124,12 +124,12 @@ describe("GET /s/:id", () => {
         data: () => ({
           storagePath: "p",
           expiresAt: future(),
-          responseHeaders: { cacheControl: "public" },
+          responseHeaders: { cacheControl: "private" },
         }),
       });
       const res = await app.request("/01ABC");
 
-      expect(res.headers.get("cache-control")).toMatch(/^public, max-age=\d+$/);
+      expect(res.headers.get("cache-control")).toMatch(/^private, max-age=\d+$/);
     });
 
     it("omits the optional headers when they are not configured", async () => {

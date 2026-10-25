@@ -14,13 +14,14 @@ import app from "../index.js";
 import { db } from "../lib/firebase.js";
 import { getBucket } from "../lib/storage.js";
 import { epochMills } from "../lib/time.js";
+import { sessionCookieHeader } from "../test/auth.js";
 
 // Requires: firebase emulators:start --only firestore,storage
 
 function makeRequest(body: unknown) {
   return new Request("http://localhost/upload", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", cookie: sessionCookieHeader() },
     body: JSON.stringify(body),
   });
 }
@@ -55,7 +56,7 @@ describe("POST /upload (integration)", () => {
     const res = await app.fetch(
       new Request("http://localhost/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", cookie: sessionCookieHeader() },
         body: "not-json",
       })
     );

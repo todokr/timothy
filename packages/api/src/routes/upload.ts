@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { getUser, type AppEnv } from "../lib/auth.js";
 import { db } from "../lib/firebase.js";
 import { UPLOAD_CONTENT_TYPE, generateSignedUploadUrl } from "../lib/storage.js";
 import { ulid } from "ulid";
@@ -48,7 +49,7 @@ export function parseUploadRequest(body: unknown): ParseResult {
   return { ok: true, data: { title, description, ttlDays } };
 }
 
-const app = new Hono();
+const app = new Hono<AppEnv>();
 
 app.post("/", async (c) => {
   if (!isJsonContentType(c.req.header("content-type"))) {
@@ -68,6 +69,7 @@ app.post("/", async (c) => {
   }
   const { title, description, ttlDays } = parsed.data;
 
+  const user = getUser(c);
   const id = ulid();
   const storagePath = `${STORAGE_BASE_PATH}/${id}.html`;
   const expiresAt = ttlDays === null ? null : addSeconds(now(), ttlDays * 24 * 60 * 60);
@@ -84,6 +86,9 @@ app.post("/", async (c) => {
     storagePath,
     expiresAt,
     createdAt: now(),
+    // 削除・ヘッダ設定の権限判定に使う。セッション由来の値なので利用者の入力では変えられない
+    ownerEmail: user.email,
+    ownerName: user.name,
   });
 
   return c.json({

@@ -75,6 +75,7 @@ describe("listFiles", () => {
         url: "https://api.example.com/s/01ABC",
         expiresAt: "2026-08-14T00:00:00.000Z",
         createdAt: "2026-08-07T00:00:00.000Z",
+        owner: null,
       },
     ]);
   });
@@ -95,6 +96,33 @@ describe("listFiles", () => {
     const files = await listFiles("https://api.example.com");
 
     expect(files[0].expiresAt).toBeNull();
+  });
+
+  it("maps ownerEmail / ownerName to owner, and a legacy document to owner: null", async () => {
+    const createdAt = { toDate: () => new Date("2026-08-07T00:00:00.000Z") };
+    mockSnapshot([
+      { id: "01NEW", data: { title: "A", description: "", expiresAt: null, createdAt, ownerEmail: "a@example.com", ownerName: "Alice" } },
+      { id: "01OLD", data: { title: "B", description: "", expiresAt: null, createdAt } },
+    ]);
+
+    const files = await listFiles("http://localhost");
+
+    expect(files[0].owner).toEqual({ email: "a@example.com", name: "Alice" });
+    expect(files[1].owner).toBeNull();
+  });
+
+  // 絞り込みはメモリ上。複合インデックスを増やさないため、Firestore には where を送らない。
+  it("filters by ownerEmail ignoring case, excluding legacy files", async () => {
+    const createdAt = { toDate: () => new Date("2026-08-07T00:00:00.000Z") };
+    mockSnapshot([
+      { id: "01MINE", data: { title: "A", description: "", expiresAt: null, createdAt, ownerEmail: "Tester@Example.com", ownerName: "T" } },
+      { id: "01OTHER", data: { title: "B", description: "", expiresAt: null, createdAt, ownerEmail: "other@example.com", ownerName: "O" } },
+      { id: "01LEGACY", data: { title: "C", description: "", expiresAt: null, createdAt } },
+    ]);
+
+    const files = await listFiles("http://localhost", { ownerEmail: "tester@example.com" });
+
+    expect(files.map((f) => f.id)).toEqual(["01MINE"]);
   });
 
   it("queries the htmlFiles collection ordered by createdAt descending", async () => {

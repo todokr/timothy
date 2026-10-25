@@ -1,6 +1,6 @@
 # timothy-cli
 
-A CLI tool to upload LLM-generated HTML and share it via time-limited URLs. Only people who know the URL can view the file — no login required for viewers.
+A CLI tool to upload LLM-generated HTML and share it via time-limited URLs. Viewing a shared URL, uploading, listing and deleting all require a Google login on an allowed email domain (run `tim login` once for the CLI).
 
 Requires a self-hosted instance of `@timothy/api`. See the [repository README](https://github.com/incident-buddy/timothy-cli) for self-hosting instructions.
 
@@ -29,6 +29,19 @@ tim setup
 
 Configuration is stored in `~/.config/timothy/config.json`.
 
+### Login
+
+Log in with Google through your browser (the API admin decides which email domains are allowed):
+
+```bash
+tim login
+# ✓ Logged in
+```
+
+The CLI token is stored in `~/.config/timothy/credentials.json` (mode 0600). If the browser does not open, visit the URL printed in the terminal. `tim logout` revokes the token on the server and deletes the saved credentials.
+
+Without a login, commands fail with `Not logged in. Run \`tim login\`.` Browser-only users need nothing but a Google login.
+
 ### Upload
 
 ```bash
@@ -49,15 +62,22 @@ llm generate report | tim upload --stdin --title "Generated Report"
 
 ```bash
 tim list
+
+# Only files you own
+tim list --mine
 ```
 
 ```
-ID                          TITLE             CREATED       EXPIRES
-01JWXYZ...                  Monthly Report    2026-05-20    2026-05-27
-01JWABC...                  Analysis          2026-05-18    2026-05-25
+URL                         TITLE             OWNER              CREATED       EXPIRES
+https://.../s/01JWXYZ...    Monthly Report    alice@example.com  2026-05-20    2026-05-27
+https://.../s/01JWABC...    Analysis          -                  2026-05-18    2026-05-25
 ```
+
+Files with no recorded owner (uploaded before login existed) show `-`.
 
 ### Delete
+
+Only the owner can delete a file; otherwise the command fails with `Forbidden: you are not the owner of this file`.
 
 ```bash
 tim delete <id>
