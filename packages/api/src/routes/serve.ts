@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { db } from "../lib/firebase.js";
 import { getFileContent } from "../lib/storage.js";
 import { buildHeaders } from "../lib/responseHeaders.js";
+import { injectBridge } from "../lib/bridge.js";
 import { getVersion, latestVersionOf, parseVersionParam } from "../lib/versions.js";
 
 const HTML_FILES_COLLECTION = "htmlFiles";
@@ -37,7 +38,7 @@ app.get("/:id/v/:n", async (c) => {
   c.header("X-Frame-Options", headers.xFrameOptions);
   if (headers.referrerPolicy) c.header("Referrer-Policy", headers.referrerPolicy);
 
-  return c.html(html);
+  return c.html(injectBridge(html));
 });
 
 export default app;
