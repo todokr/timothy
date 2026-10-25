@@ -17,7 +17,8 @@ describe("safeNextPath", () => {
     expect(safeNextPath(p)).toBe(p);
   });
 
-  it.each([
+  // URL 解決でドット区間が畳まれると //host になる（/.//host → //host）
+  const UNSAFE_NEXT = [
     "//evil.example",
     "/\\evil.example",
     "https://evil.example",
@@ -39,12 +40,32 @@ describe("safeNextPath", () => {
     "/\\/evil.example",
     "/a\\..\\..\\/evil",
     "/s/x\\evil",
-  ])(
-    "falls back to / for %s",
-    (p) => {
-      expect(safeNextPath(p as string | undefined)).toBe("/");
-    },
-  );
+    "/.//evil.example",
+    "/a/..//evil.example",
+    "/%2e//evil.example",
+    "/%2E%2E//evil.example",
+    "/a/%2e%2e//evil.example",
+    "/.%2e//evil.example",
+    "/./",
+    "/s/../",
+  ];
+
+  it.each(UNSAFE_NEXT)("falls back to / for %s", (p) => {
+    expect(safeNextPath(p as string | undefined)).toBe("/");
+  });
+
+  // 一覧に漏れがあっても、戻り値が別オリジンを指す形にならないことを確かめる
+  it("never returns a protocol-relative or backslash path", () => {
+    const pieces = ["/", "//", ".", "..", "%2e", "%2E%2E", "\\", "\t", "a", "evil.example", "?", "#"];
+    const inputs: string[] = [...(UNSAFE_NEXT.filter((p) => p !== undefined) as string[])];
+    for (const a of pieces) for (const b of pieces) for (const c of pieces) inputs.push(`/${a}${b}${c}`);
+    for (const input of inputs) {
+      const out = safeNextPath(input);
+      expect(out.startsWith("/"), input).toBe(true);
+      expect(out.startsWith("//"), input).toBe(false);
+      expect(out.includes("\\"), input).toBe(false);
+    }
+  });
 });
 
 function appWith(onMissing: "redirect" | "json") {

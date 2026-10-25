@@ -68,7 +68,17 @@ function hasRawUnsafeChar(s: string): boolean {
   return false;
 }
 
+// パス中の "." / ".." 区間（%2e エンコード形を含む）。URL 解決で畳まれると
+// "/.//host" → "//host" のように別オリジンを指す形になるため、解決前に弾く
+const DOT_SEGMENT = /(?:^|\/)(?:\.|%2e){1,2}(?:\/|$)/i;
+
 const PLACEHOLDER_ORIGIN = "http://placeholder.invalid";
+
+// 戻り値そのものが同一オリジンのパスであることの最終確認。
+// 入力側の検査に漏れがあっても、ここで "//host" や "\" を含む値は外に出さない
+function isSameOriginPath(p: string): boolean {
+  return p.startsWith("/") && !p.startsWith("//") && !p.includes("\\");
+}
 
 /**
  * ログイン後の戻り先として許すパスだけを通す（オープンリダイレクト対策）。
@@ -77,12 +87,15 @@ const PLACEHOLDER_ORIGIN = "http://placeholder.invalid";
  * タブ・改行を取り除き、`\` を `/` として扱うため、`/<TAB>/host` や `/\host` が
  * `//host`（別オリジン）になる。そこで、
  * 1. 制御文字・バックスラッシュ（% エンコード形も含む）を含むものを位置に関係なく弾き、
- * 2. ダミーのオリジンを基準に URL として解決し、オリジンが変わらないことを確かめ、
- * 3. 解決後の pathname + search + hash だけを返す。
+ * 2. パスに "." / ".." 区間（%2e 形も含む）があるものを弾き（解決で畳まれて "//host" になるため）、
+ * 3. ダミーのオリジンを基準に URL として解決し、オリジンが変わらないことを確かめ、
+ * 4. 解決後の pathname + search + hash が "/" 始まりかつ "//" 始まりでないことを確かめて返す。
  */
 export function safeNextPath(next: string | undefined): string {
   if (!next || !next.startsWith("/") || next.startsWith("//")) return "/";
   if (hasRawUnsafeChar(next) || ENCODED_UNSAFE.test(next)) return "/";
+  const path = next.split(/[?#]/, 1)[0];
+  if (DOT_SEGMENT.test(path)) return "/";
   let url: URL;
   try {
     url = new URL(next, PLACEHOLDER_ORIGIN);
@@ -90,7 +103,8 @@ export function safeNextPath(next: string | undefined): string {
     return "/";
   }
   if (url.origin !== PLACEHOLDER_ORIGIN) return "/";
-  return url.pathname + url.search + url.hash;
+  const result = url.pathname + url.search + url.hash;
+  return isSameOriginPath(result) ? result : "/";
 }
 
 // Google に登録するリダイレクト URI と完全一致させる必要があるため、
