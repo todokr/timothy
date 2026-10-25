@@ -138,7 +138,9 @@ describe("apiUploadRevision", () => {
     fetchMock
       .mockResolvedValueOnce(json({ uploadId: "up1", uploadUrl: "https://storage.example/put", uploadHeaders: {} }))
       .mockResolvedValueOnce(new Response(null, { status: 200 }))
-      .mockResolvedValueOnce(json({ error: "Forbidden" }, 403));
-    await expect(apiUploadRevision("01F", "x", config)).rejects.toThrow("Forbidden: Forbidden");
+      .mockResolvedValueOnce(json({ error: "Only the owner can upload revisions" }, 403));
+    await expect(apiUploadRevision("01F", "x", config)).rejects.toThrow(
+      "Forbidden: Only the owner can upload revisions"
+    );
   });
 });

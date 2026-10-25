@@ -4,7 +4,11 @@ import { getUser, type AppEnv } from "../lib/auth.js";
 import { db } from "../lib/firebase.js";
 import { HTML_FILES_COLLECTION, resolveBaseUrl } from "../lib/files.js";
 import { isJsonContentType } from "../lib/http.js";
-import { UPLOAD_CONTENT_TYPE, generateSignedUploadUrl } from "../lib/storage.js";
+import {
+  CREATE_ONLY_HEADER,
+  UPLOAD_CONTENT_TYPE,
+  generateSignedCreateOnlyUploadUrl,
+} from "../lib/storage.js";
 import {
   commitRevision,
   isUploadId,
@@ -27,7 +31,7 @@ function denialResponse(reason: RevisionDenial) {
         status: 403 as const,
       };
     case "forbidden":
-      return { body: { error: "Forbidden" }, status: 403 as const };
+      return { body: { error: "Only the owner can upload revisions" }, status: 403 as const };
   }
 }
 
@@ -50,12 +54,13 @@ app.post("/:id/versions", async (c) => {
   }
 
   const uploadId = ulid();
-  const uploadUrl = await generateSignedUploadUrl(revisionStoragePath(id, uploadId));
+  const uploadUrl = await generateSignedCreateOnlyUploadUrl(revisionStoragePath(id, uploadId));
 
   return c.json({
     uploadId,
     uploadUrl,
-    uploadHeaders: { "Content-Type": UPLOAD_CONTENT_TYPE },
+    // 署名済み URL は確定後も 15 分有効なので、作成専用にして確定済みの版の上書きを防ぐ。
+    uploadHeaders: { "Content-Type": UPLOAD_CONTENT_TYPE, ...CREATE_ONLY_HEADER },
   });
 });
 

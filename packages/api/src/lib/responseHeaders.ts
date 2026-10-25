@@ -234,15 +234,22 @@ function sourceDirective(key: SourceKey, added: string[] | undefined): string {
  * window.open() は CSP では塞げない（navigate-to は仕様から削除済み）ため、
  * allow-popups がある限り送信経路として残る。
  */
-export function buildCsp(settings?: ResponseHeaderSettings): string {
+/**
+ * 実際に配信する sandbox トークン。CSP の sandbox と iframe の sandbox 属性が
+ * 同じ集合になるよう、どちらもここから取る。
+ */
+export function effectiveSandboxTokens(settings?: ResponseHeaderSettings): readonly string[] {
   // 保存済みの値も語彙で濾す。parseSettings は書き込み時にしか働かないので、
   // 読み取り側でも通さないと「一度保存された危険な設定が配信され続ける」形になる。
   const stored = settings?.sandbox?.filter((token) =>
     (availableSandboxTokens() as readonly string[]).includes(token)
   );
-  const tokens = stored?.length ? stored : DEFAULT_SANDBOX_TOKENS;
+  return stored?.length ? stored : DEFAULT_SANDBOX_TOKENS;
+}
+
+export function buildCsp(settings?: ResponseHeaderSettings): string {
   return [
-    `sandbox ${tokens.join(" ")}`,
+    `sandbox ${effectiveSandboxTokens(settings).join(" ")}`,
     "default-src 'none'",
     sourceDirective("script", settings?.allowedSources?.script),
     sourceDirective("style", settings?.allowedSources?.style),

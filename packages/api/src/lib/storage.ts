@@ -31,6 +31,27 @@ export async function generateSignedUploadUrl(
   return url;
 }
 
+/** オブジェクトが存在しないときだけ書き込める、という GCS の事前条件。 */
+export const CREATE_ONLY_HEADER = { "x-goog-if-generation-match": "0" } as const;
+
+/**
+ * 作成専用の署名付きアップロード URL。事前条件ヘッダを署名に含めるので、
+ * クライアントは同じヘッダを送る必要があり、既存のオブジェクトは上書きできない。
+ */
+export async function generateSignedCreateOnlyUploadUrl(
+  storagePath: string
+): Promise<string> {
+  const bucket = getBucket();
+  const [url] = await bucket.file(storagePath).getSignedUrl({
+    version: "v4",
+    action: "write",
+    expires: Date.now() + UPLOAD_URL_TTL_MS,
+    contentType: UPLOAD_CONTENT_TYPE,
+    extensionHeaders: CREATE_ONLY_HEADER,
+  });
+  return url;
+}
+
 export async function getFileContent(storagePath: string): Promise<string> {
   const bucket = getBucket();
   const [contents] = await bucket.file(storagePath).download();

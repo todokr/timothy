@@ -10,16 +10,16 @@ vi.mock("../lib/versions.js", async (importOriginal) => ({
   commitRevision: vi.fn(),
 }));
 
-// generateSignedUploadUrl だけ差し替える。
+// generateSignedCreateOnlyUploadUrl だけ差し替える。
 vi.mock("../lib/storage.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/storage.js")>()),
-  generateSignedUploadUrl: vi.fn(),
+  generateSignedCreateOnlyUploadUrl: vi.fn(),
 }));
 
 import versionsApp from "./versions.js";
 import { TEST_USER, withUser } from "../test/auth.js";
 import { db } from "../lib/firebase.js";
-import { generateSignedUploadUrl } from "../lib/storage.js";
+import { generateSignedCreateOnlyUploadUrl } from "../lib/storage.js";
 import { commitRevision, isUploadId, revisionStoragePath } from "../lib/versions.js";
 
 const app = withUser(versionsApp);
@@ -45,7 +45,7 @@ const past = { toDate: () => new Date(Date.now() - 60_000) };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(generateSignedUploadUrl).mockResolvedValue("https://storage.example/signed");
+  vi.mocked(generateSignedCreateOnlyUploadUrl).mockResolvedValue("https://storage.example/signed");
 });
 
 describe("POST /files/:id/versions", () => {
@@ -56,8 +56,11 @@ describe("POST /files/:id/versions", () => {
     const body = await res.json();
     expect(isUploadId(body.uploadId)).toBe(true);
     expect(body.uploadUrl).toBe("https://storage.example/signed");
-    expect(body.uploadHeaders).toEqual({ "Content-Type": "text/html; charset=utf-8" });
-    expect(generateSignedUploadUrl).toHaveBeenCalledWith(revisionStoragePath("01FILE", body.uploadId));
+    expect(body.uploadHeaders).toEqual({
+      "Content-Type": "text/html; charset=utf-8",
+      "x-goog-if-generation-match": "0",
+    });
+    expect(generateSignedCreateOnlyUploadUrl).toHaveBeenCalledWith(revisionStoragePath("01FILE", body.uploadId));
   });
 
   it("refuses a file without an owner and issues nothing", async () => {
@@ -65,15 +68,15 @@ describe("POST /files/:id/versions", () => {
     const res = await post("/01FILE/versions");
     expect(res.status).toBe(403);
     expect(await res.json()).toEqual({ error: "Revisions are not allowed for files without an owner" });
-    expect(generateSignedUploadUrl).not.toHaveBeenCalled();
+    expect(generateSignedCreateOnlyUploadUrl).not.toHaveBeenCalled();
   });
 
   it("refuses someone else's file and issues nothing", async () => {
     mockDoc(true, { ownerEmail: "other@example.com", expiresAt: null });
     const res = await post("/01FILE/versions");
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: "Forbidden" });
-    expect(generateSignedUploadUrl).not.toHaveBeenCalled();
+    expect(await res.json()).toEqual({ error: "Only the owner can upload revisions" });
+    expect(generateSignedCreateOnlyUploadUrl).not.toHaveBeenCalled();
   });
 
   it("returns 410 for an expired file", async () => {
@@ -81,7 +84,7 @@ describe("POST /files/:id/versions", () => {
     const res = await post("/01FILE/versions");
     expect(res.status).toBe(410);
     expect(await res.json()).toEqual({ error: "Gone" });
-    expect(generateSignedUploadUrl).not.toHaveBeenCalled();
+    expect(generateSignedCreateOnlyUploadUrl).not.toHaveBeenCalled();
   });
 
   it("returns 404 for a missing file", async () => {
@@ -89,7 +92,7 @@ describe("POST /files/:id/versions", () => {
     const res = await post("/01FILE/versions");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: "Not Found" });
-    expect(generateSignedUploadUrl).not.toHaveBeenCalled();
+    expect(generateSignedCreateOnlyUploadUrl).not.toHaveBeenCalled();
   });
 
   it("requires a JSON content type", async () => {
@@ -98,7 +101,7 @@ describe("POST /files/:id/versions", () => {
     expect(res.status).toBe(415);
     expect(await res.json()).toEqual({ error: "Content-Type must be application/json" });
     expect(get).not.toHaveBeenCalled();
-    expect(generateSignedUploadUrl).not.toHaveBeenCalled();
+    expect(generateSignedCreateOnlyUploadUrl).not.toHaveBeenCalled();
   });
 });
 
@@ -115,7 +118,7 @@ describe("POST /files/:id/versions/:uploadId/commit", () => {
     ["not_found", 404, { error: "Not Found" }],
     ["gone", 410, { error: "Gone" }],
     ["no_owner", 403, { error: "Revisions are not allowed for files without an owner" }],
-    ["forbidden", 403, { error: "Forbidden" }],
+    ["forbidden", 403, { error: "Only the owner can upload revisions" }],
     ["content_missing", 409, { error: "Uploaded content not found" }],
   ] as const)("maps %s to %i", async (reason, status, body) => {
     vi.mocked(commitRevision).mockResolvedValue({ ok: false, reason });

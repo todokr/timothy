@@ -96,16 +96,44 @@ describe("GET /s/:id", () => {
     expect(await res.json()).toEqual({ error: "Gone" });
   });
 
-  it("does not sandbox the frame with an attribute", async () => {
+  it("sandboxes the frame with the default tokens", async () => {
     const html = await (await app.request("/01ABC")).text();
-    expect(html).not.toMatch(/<iframe[^>]*sandbox/);
+    expect(html).toMatch(/<iframe[^>]*sandbox="allow-scripts allow-popups allow-downloads allow-modals"/);
     expect(html).toMatch(/<iframe[^>]*title="設計書"/);
+  });
+
+  it("uses the file's saved sandbox tokens for the frame attribute", async () => {
+    mockParent(
+      {
+        title: "設計書",
+        storagePath: "p",
+        latestVersion: 3,
+        expiresAt: null,
+        responseHeaders: { sandbox: ["allow-scripts", "allow-forms"] },
+      },
+      threeVersions,
+    );
+    const html = await (await app.request("/01ABC")).text();
+    expect(html).toMatch(/<iframe[^>]*sandbox="allow-scripts allow-forms"/);
+    expect(html).not.toContain("allow-same-origin");
+  });
+
+  it("never puts allow-same-origin in the frame attribute", async () => {
+    const html = await (await app.request("/01ABC")).text();
+    expect(html).not.toContain("allow-same-origin");
+  });
+
+  it("titles the tab with the file title", async () => {
+    const html = await (await app.request("/01ABC")).text();
+    expect(html).toContain("<title>設計書</title>");
   });
 
   it("refuses to be framed and is not cached", async () => {
     const res = await app.request("/01ABC");
     expect(res.headers.get("x-frame-options")).toBe("DENY");
-    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
+    expect(res.headers.get("content-security-policy")).toBe(
+      "frame-ancestors 'none'; frame-src 'self'",
+    );
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 

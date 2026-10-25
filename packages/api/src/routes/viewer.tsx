@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { db } from "../lib/firebase.js";
+import { effectiveSandboxTokens } from "../lib/responseHeaders.js";
 import { latestVersionOf, listVersions, parseVersionParam } from "../lib/versions.js";
 import { Layout, formatJst } from "./web.js";
 import {
@@ -38,14 +39,18 @@ app.get("/:id", async (c) => {
 
   const versions = await listVersions(id, data);
   const title: string = data.title ?? id;
+  // 本体の CSP sandbox と同じトークンを属性にも付ける（二重の防御）。同じ集合なので打ち消し合わない。
+  const sandbox = effectiveSandboxTokens(data.responseHeaders).join(" ");
 
   // 確認画面と同じく、別サイトの iframe に入れられないようにする。
   c.header("X-Frame-Options", "DENY");
-  c.header("Content-Security-Policy", "frame-ancestors 'none'");
+  // frame-src 'self' は、本体の JS が iframe を外部サイトへ遷移させ、
+  // timothy の画面の中に偽のページを出すのを防ぐ。
+  c.header("Content-Security-Policy", "frame-ancestors 'none'; frame-src 'self'");
   c.header("Cache-Control", "no-store");
 
   return c.html(
-    <Layout script={VIEWER_SCRIPT}>
+    <Layout script={VIEWER_SCRIPT} title={title}>
       <div class={viewerClass}>
         <header data-viewer-header class={viewerHeaderClass}>
           <h1>{title}</h1>
@@ -65,7 +70,13 @@ app.get("/:id", async (c) => {
             </span>
           ) : null}
         </header>
-        <iframe id="viewer-frame" class={viewerFrameClass} src={`/s/${id}/v/${shown}`} title={title}></iframe>
+        <iframe
+          id="viewer-frame"
+          class={viewerFrameClass}
+          src={`/s/${id}/v/${shown}`}
+          title={title}
+          sandbox={sandbox}
+        ></iframe>
       </div>
     </Layout>,
   );

@@ -81,7 +81,7 @@ export function isExpired(iso: string | null, nowMs: number): boolean {
 // ブラウザが互換モード (quirks mode) で描画するのを防ぐ。
 const DOCTYPE = raw("<!DOCTYPE html>");
 
-export function Layout(props: { children: unknown; script?: string }) {
+export function Layout(props: { children: unknown; script?: string; title?: string }) {
   return (
     <>
       {DOCTYPE}
@@ -89,7 +89,7 @@ export function Layout(props: { children: unknown; script?: string }) {
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Tim</title>
+          <title>{props.title ?? "Tim"}</title>
           <Style>{globalStyles}</Style>
         </head>
         <body>

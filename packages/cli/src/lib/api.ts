@@ -33,7 +33,8 @@ export type FileEntry = {
   expiresAt: string | null;
   /** 所有者なし（認証導入前のファイル）は null。 */
   owner: { email: string; name: string } | null;
-  latestVersion: number;
+  // 版に対応していない古い API では返らない
+  latestVersion?: number;
 };
 
 export type RevisionResponse = { id: string; version: number; url: string };
