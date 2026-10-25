@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { getUser, type AppEnv } from "../lib/auth.js";
 import { canManage } from "../lib/ownership.js";
 import { db } from "../lib/firebase.js";
-import { deleteFile, isNotFoundError } from "../lib/storage.js";
+import { deleteFile, deleteFilesWithPrefix, isNotFoundError } from "../lib/storage.js";
+import { revisionPrefix } from "../lib/versions.js";
 
 const HTML_FILES_COLLECTION = "htmlFiles";
 
@@ -35,7 +36,10 @@ app.delete("/:id", async (c) => {
     if (!isNotFoundError(error)) throw error;
   }
 
-  await docRef.delete();
+  // 確定済みの版と未確定のアップロードは同じ接頭辞の下にある
+  await deleteFilesWithPrefix(revisionPrefix(id));
+  // versions サブコレクションごと消す（docRef.delete() はサブコレクションを残す）
+  await db.recursiveDelete(docRef);
 
   return c.json({ id });
 });
