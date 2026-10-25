@@ -3,6 +3,8 @@ import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { deleteCommand } from "./commands/delete.js";
 import { listCommand } from "./commands/list.js";
+import { loginCommand } from "./commands/login.js";
+import { logoutCommand } from "./commands/logout.js";
 import { setupCommand } from "./commands/setup.js";
 import { uploadCommand } from "./commands/upload.js";
 
@@ -13,6 +15,8 @@ program
   .version(pkg.version);
 
 program.addCommand(setupCommand);
+program.addCommand(loginCommand);
+program.addCommand(logoutCommand);
 program.addCommand(uploadCommand);
 program.addCommand(listCommand);
 program.addCommand(deleteCommand);

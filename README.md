@@ -33,6 +33,8 @@ URLはCloud Run / AWS Lambda上のAPIを経由して配信されます。APIが�
 ## 必要なもの
 
 - デプロイ済みの `@timothy/api`（[セルフホスティング](#セルフホスティング) を参照）
+- 許可されたドメインの Google アカウント（管理者が `ALLOWED_EMAIL_DOMAINS` で指定します）
+- CLIを使う場合は `tim login` でのログイン。Web UIだけを使う人は Google ログイン以外に用意するものはありません
 - そのインスタンスへのネットワーク到達性（管理者が `ALLOWED_IPS` を設定している場合、許可されたアドレスから接続する必要があります）
 
 ## CLIツールの使い方
@@ -60,6 +62,21 @@ tim setup
 
 設定は `~/.config/timothy/config.json` に保存されます。
 
+### ログイン
+
+APIはログインが必要です。`tim login` を実行するとブラウザが開き、Googleでログインして
+確認すると、CLI用のトークンが `~/.config/timothy/credentials.json`（ファイルモード 0600）に
+保存されます。ブラウザが開かない環境では、表示されるURLを手動で開いてください。
+
+```bash
+tim login
+# ✓ Logged in
+
+tim logout   # サーバー側でトークンを失効させ、保存済みの資格情報を削除
+```
+
+未ログインのまま他のコマンドを実行すると `Not logged in. Run \`tim login\`.` と表示されます。
+
 ### アップロード
 
 ```bash
@@ -80,13 +97,18 @@ llm generate report | tim upload --stdin --title "生成レポート"
 
 ```bash
 tim list
+
+# 自分がアップロードしたファイルだけを表示
+tim list --mine
 ```
 
 ```
-ID                          TITLE             CREATED       EXPIRES
-01JWXYZ...                  月次レポート        2026-05-20    2026-05-27
-01JWABC...                  分析結果            2026-05-18    2026-05-25
+URL                         TITLE             OWNER              CREATED       EXPIRES
+https://.../s/01JWXYZ...    月次レポート        alice@example.com  2026-05-20    2026-05-27
+https://.../s/01JWABC...    分析結果            -                  2026-05-18    2026-05-25
 ```
+
+OWNER は所有者のメールアドレスです。所有者が記録されていないファイル（認証導入前のもの）は `-` です。
 
 ## Web UI
 
@@ -111,12 +133,16 @@ https://your-api.example.com/
 - `Cache-Control` / `Referrer-Policy`
 
 危険度は各項目に表示されます。変更内容は構造化ログ（`event: "headers.updated"`）に
-記録されますが、**認証がないため変更者は記録できません**（残るのは日時・IPアドレス・変更内容）。
+記録されます。ヘッダ設定を変更できるのはファイルの所有者だけで、ログには日時・IPアドレス・
+変更内容に加えて変更したユーザーも残ります。
 
 Web UIのアップロードはCLIと同じ署名付きURLのフローを使うため、ストレージバケットに
 CORSの設定が必要です。[セルフホスティング](#セルフホスティング) を参照してください。
 
 ### 削除
+
+ファイルを削除できるのは所有者だけです。他の人のファイルを削除しようとすると
+`Forbidden: you are not the owner of this file` で失敗します。
 
 ```bash
 tim delete <id>
@@ -231,7 +257,31 @@ gcloud run deploy timothy-api \
 デプロイ後に表示されるサービスURLをメモしてください。
 
 
-### 5. （オプション）IPアドレス制限の設定
+### 5. Googleログイン（OAuthクライアント）の設定
+
+APIはGoogleアカウントでのログインを必須とします。Google Cloud ConsoleのAPIとサービス →
+認証情報で「OAuthクライアントID」（アプリケーションの種類: ウェブアプリケーション）を作成し、
+**承認済みのリダイレクトURI** に `<公開URL>/auth/callback` を登録してください
+（例: `https://timothy-api-xxxx-an.a.run.app/auth/callback`）。
+
+APIには次の環境変数を設定します。必須の変数が欠けていると、APIは起動時にエラーになります。
+
+| 環境変数 | 必須 | 意味 |
+|---|---|---|
+| `GOOGLE_OAUTH_CLIENT_ID` | 必須 | OAuthクライアントのID |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | 必須 | OAuthクライアントのシークレット（Secret Managerでの管理を推奨） |
+| `SESSION_SECRET` | 必須 | ログインセッションの署名に使うランダムな文字列（Secret Managerでの管理を推奨） |
+| `ALLOWED_EMAIL_DOMAINS` | 必須 | ログインを許可するメールアドレスのドメイン（カンマ区切り。例: `example.com`） |
+| `PUBLIC_BASE_URL` | 任意 | APIの公開URL（例: `https://timothy-api-xxxx-an.a.run.app`）。プロキシ越しでHostが揺れる場合に、コールバックURLの基準として固定する |
+
+```bash
+gcloud run services update timothy-api \
+  --region ${REGION} \
+  --set-env-vars ALLOWED_EMAIL_DOMAINS=example.com,GOOGLE_OAUTH_CLIENT_ID=... \
+  --set-secrets GOOGLE_OAUTH_CLIENT_SECRET=...,SESSION_SECRET=...
+```
+
+### 6. （オプション）IPアドレス制限の設定
 
 APIへのアクセスを制限する場合、Cloud Runの `ALLOWED_IPS` 環境変数にカンマ区切りでIPまたはCIDRを設定します:
 
@@ -242,8 +292,7 @@ gcloud run services update timothy-api \
 ```
 
 `ALLOWED_IPS` はWeb UI（`/`）、管理系エンドポイント（`/upload`、`/files`、`/files/<id>`）、
-共有エンドポイント（`/s/*`）に適用されます。**未設定の場合はすべてのリクエストが許可され、
-URLを知っている人は誰でもファイルの一覧取得・アップロード・削除ができます。** 設定すると
+共有エンドポイント（`/s/*`）に適用されます。**未設定の場合はIPアドレスによる制限はかかりません**（ログインは別途必要です）。設定すると
 CLIからのアクセスも、共有URLを開く相手も、このIPアドレスに制限される点に注意してください。
 
 ※ クライアントIPは `X-Forwarded-For` の**末尾から** `XFF_TRUSTED_HOPS` 個目のエントリから
@@ -266,13 +315,15 @@ gcloud run services update timothy-api \
   --set-env-vars XFF_TRUSTED_HOPS=2
 ```
 
-### 6. CLIの設定
+### 7. CLIの設定
 
-ユーザーはCloud RunサービスのURLを使ってCLIを設定します:
+ユーザーはCloud RunサービスのURLを使ってCLIを設定し、ログインします:
 
 ```bash
 tim setup
 # API endpoint [https://api.timothy.example.com]: https://timothy-api-xxxx-an.a.run.app
+
+tim login
 ```
 
 ### バケットのCORS設定

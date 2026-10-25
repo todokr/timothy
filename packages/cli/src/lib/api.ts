@@ -1,4 +1,5 @@
 import type { Config } from "./config.js";
+import { readCredentials } from "./credentials.js";
 
 export type UploadPayload = {
   title: string;
@@ -30,13 +31,21 @@ export type FileEntry = {
   createdAt: string;
   /** ISO 8601。null は無期限。 */
   expiresAt: string | null;
+  /** 所有者なし（認証導入前のファイル）は null。 */
+  owner: { email: string; name: string } | null;
 };
 
-const jsonHeaders: Record<string, string> = {
-  "Content-Type": "application/json",
-};
+const LOGIN_HINT = "Not logged in. Run `tim login`.";
+
+/** 資格情報が無ければ API を呼ぶ前に案内する。無駄な往復を避け、401 と同じ文言にそろえる。 */
+async function authHeaders(): Promise<Record<string, string>> {
+  const credentials = await readCredentials();
+  if (!credentials) throw new Error(LOGIN_HINT);
+  return { Authorization: `Bearer ${credentials.token}` };
+}
 
 async function assertOk(res: Response): Promise<void> {
+  if (res.status === 401) throw new Error(LOGIN_HINT);
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`API error ${res.status}: ${body}`);
@@ -50,7 +59,7 @@ export async function apiUpload(
 ): Promise<UploadResponse> {
   const initRes = await fetch(`${config.apiEndpoint}/upload`, {
     method: "POST",
-    headers: jsonHeaders,
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify(payload),
   });
   await assertOk(initRes);
@@ -69,8 +78,14 @@ export async function apiUpload(
   return { id: init.id, url: init.url, expiresAt: init.expiresAt };
 }
 
-export async function apiList(config: Config): Promise<FileEntry[]> {
-  const res = await fetch(`${config.apiEndpoint}/files`);
+export async function apiList(
+  config: Config,
+  opts: { mine?: boolean } = {}
+): Promise<FileEntry[]> {
+  const query = opts.mine ? "?owner=me" : "";
+  const res = await fetch(`${config.apiEndpoint}/files${query}`, {
+    headers: await authHeaders(),
+  });
   await assertOk(res);
   const { files } = (await res.json()) as { files: FileEntry[] };
   return files;
@@ -79,6 +94,19 @@ export async function apiList(config: Config): Promise<FileEntry[]> {
 export async function apiDelete(id: string, config: Config): Promise<void> {
   const res = await fetch(`${config.apiEndpoint}/files/${id}`, {
     method: "DELETE",
+    headers: await authHeaders(),
+  });
+  if (res.status === 403) {
+    throw new Error("Forbidden: you are not the owner of this file");
+  }
+  await assertOk(res);
+}
+
+/** CLI 用トークンをサーバー側で失効させる。 */
+export async function apiLogoutToken(config: Config): Promise<void> {
+  const res = await fetch(`${config.apiEndpoint}/auth/cli-token`, {
+    method: "DELETE",
+    headers: await authHeaders(),
   });
   await assertOk(res);
 }
