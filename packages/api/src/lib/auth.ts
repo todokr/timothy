@@ -40,7 +40,8 @@ export function isAllowedEmailDomain(email: string, allowedDomains: string[]): b
  * - `redirect`: ブラウザで開くページ向け。ログイン後に元のページへ戻れるよう next を付けて送る。
  * - `json`: API 向け。リダイレクトすると fetch 側が Google のログイン画面の HTML を受け取ってしまうため 401 を返す。
  * - `frame`: iframe の中で開かれる本体向け。リダイレクトすると Google が iframe 内での表示を拒否するため、
- *   401 の小さな HTML を返して再読み込みを促す。
+ *   401 の小さな HTML を返して再読み込みを促す。Sec-Fetch-Dest が iframe・frame でない（本体の URL を
+ *   直接開いた）ときは、再読み込みしても直らないので `redirect` と同じくログインへ送る。
  */
 export function requireUser(onMissing: "redirect" | "json" | "frame"): MiddlewareHandler<AppEnv> {
   return createMiddleware<AppEnv>(async (c, next) => {
@@ -82,12 +83,17 @@ export function requireUser(onMissing: "redirect" | "json" | "frame"): Middlewar
     if (onMissing === "json") {
       return c.json({ error: "Unauthorized" }, 401);
     }
-    if (onMissing === "frame") {
+    if (onMissing === "frame" && isFrameRequest(c)) {
       return c.html(FRAME_EXPIRED_HTML, 401, { "Cache-Control": "no-store" });
     }
     const url = new URL(c.req.url);
     return c.redirect(`/auth/login?next=${encodeURIComponent(url.pathname + url.search)}`, 302);
   });
+}
+
+function isFrameRequest(c: Context): boolean {
+  const dest = c.req.header("sec-fetch-dest");
+  return dest === "iframe" || dest === "frame";
 }
 
 export function getUser(c: Context<AppEnv>): SessionUser {

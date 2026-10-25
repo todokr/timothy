@@ -132,13 +132,25 @@ describe("requireUser", () => {
     vi.mocked(findCliTokenUser).mockReset();
   });
 
-  it("answers an unauthenticated frame request with a 401 page instead of a redirect", async () => {
-    const res = await appWith("frame").request("/x");
-    expect(res.status).toBe(401);
-    expect(res.headers.get("location")).toBeNull();
-    expect(res.headers.get("cache-control")).toBe("no-store");
-    expect(await res.text()).toContain("ログインの有効期限が切れました");
-  });
+  it.each(["iframe", "frame"])(
+    "answers an unauthenticated request loaded as %s with a 401 page instead of a redirect",
+    async (dest) => {
+      const res = await appWith("frame").request("/x", { headers: { "sec-fetch-dest": dest } });
+      expect(res.status).toBe(401);
+      expect(res.headers.get("location")).toBeNull();
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(await res.text()).toContain("ログインの有効期限が切れました");
+    },
+  );
+
+  it.each([{ "sec-fetch-dest": "document" }, {}])(
+    "redirects a top-level visit to the frame URL to login (%o)",
+    async (headers: Record<string, string>) => {
+      const res = await appWith("frame").request("/s/01ABC/v/2?x=1", { headers });
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toBe("/auth/login?next=%2Fs%2F01ABC%2Fv%2F2%3Fx%3D1");
+    },
+  );
 
   it("does nothing when a user is already set", async () => {
     const sub = new Hono<AppEnv>();

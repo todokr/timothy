@@ -142,8 +142,14 @@ describe("authentication", () => {
   });
 
   it("does not redirect the body iframe to Google when the session is gone", async () => {
-    const res = await app.request("/s/01ABC/v/1");
+    const res = await app.request("/s/01ABC/v/1", { headers: { "sec-fetch-dest": "iframe" } });
     expect(res.status).toBe(401);
+  });
+
+  it("redirects a top-level visit to the body URL to login", async () => {
+    const res = await app.request("/s/01ABC/v/1", { headers: { "sec-fetch-dest": "document" } });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/auth/login?next=%2Fs%2F01ABC%2Fv%2F1");
   });
 
   it("still redirects the viewer page to login", async () => {
