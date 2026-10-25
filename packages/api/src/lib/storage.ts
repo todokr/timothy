@@ -51,3 +51,13 @@ export function isNotFoundError(error: unknown): boolean {
     (error as { code: unknown }).code === 404
   );
 }
+
+export async function fileExists(storagePath: string): Promise<boolean> {
+  const [exists] = await getBucket().file(storagePath).exists();
+  return exists;
+}
+
+/** prefix 配下のオブジェクトをすべて削除する。 */
+export async function deleteFilesWithPrefix(prefix: string): Promise<void> {
+  await getBucket().deleteFiles({ prefix });
+}

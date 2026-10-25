@@ -11,3 +11,14 @@ export function canManage(user: SessionUser, data: { ownerEmail?: string | null 
   if (!data.ownerEmail) return true;
   return data.ownerEmail.toLowerCase() === user.email.toLowerCase();
 }
+
+/**
+ * 修正版の追加を許すかどうか。
+ *
+ * canManage と違い、所有者の記録がないファイルは誰にも許さない。
+ * 修正は他人の公開物を差し替える操作であり、持ち主不明のものを誰でも書き換えられるのは危険なため。
+ */
+export function canRevise(user: SessionUser, data: { ownerEmail?: string | null }): boolean {
+  if (!data.ownerEmail) return false;
+  return data.ownerEmail.toLowerCase() === user.email.toLowerCase();
+}
