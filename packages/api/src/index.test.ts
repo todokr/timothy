@@ -218,3 +218,54 @@ describe("authentication", () => {
     expect(res.status).toBe(401);
   });
 });
+
+describe("GET /files owners", () => {
+  const createdAt = { toDate: () => new Date("2026-08-07T00:00:00.000Z") };
+  const base = { description: "", expiresAt: null, createdAt };
+
+  beforeEach(() => {
+    delete process.env.ALLOWED_IPS;
+    vi.mocked(db.collection).mockReturnValue({
+      orderBy: vi.fn().mockReturnValue({
+        get: vi.fn().mockResolvedValue({
+          docs: [
+            { id: "01MINE", data: () => ({ ...base, title: "Mine", ownerEmail: TEST_USER.email, ownerName: TEST_USER.name }) },
+            { id: "01OTHER", data: () => ({ ...base, title: "Other", ownerEmail: "other@example.com", ownerName: "Other" }) },
+            { id: "01LEGACY", data: () => ({ ...base, title: "Legacy" }) },
+          ],
+        }),
+      }),
+    } as unknown as ReturnType<typeof db.collection>);
+  });
+
+  afterEach(() => {
+    vi.mocked(db.collection).mockReset();
+  });
+
+  const get = (path: string) => app.request(path, { headers: { cookie: sessionCookieHeader() } });
+
+  it("returns everyone's files with owners", async () => {
+    const res = await get("/files");
+    const { files } = (await res.json()) as { files: Array<{ id: string; owner: unknown }> };
+
+    expect(res.status).toBe(200);
+    expect(files.map((f) => f.id)).toEqual(["01MINE", "01OTHER", "01LEGACY"]);
+    expect(files[0].owner).toEqual({ email: TEST_USER.email, name: TEST_USER.name });
+    expect(files[2].owner).toBeNull();
+  });
+
+  it("filters to the caller's files with ?owner=me", async () => {
+    const res = await get("/files?owner=me");
+    const { files } = (await res.json()) as { files: Array<{ id: string }> };
+
+    expect(res.status).toBe(200);
+    expect(files.map((f) => f.id)).toEqual(["01MINE"]);
+  });
+
+  it("rejects any other owner value", async () => {
+    const res = await get("/files?owner=other@example.com");
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'owner must be "me"' });
+  });
+});

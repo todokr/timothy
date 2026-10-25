@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { getUser, type AppEnv } from "../lib/auth.js";
+import { canManage } from "../lib/ownership.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "../lib/firebase.js";
 import { HTML_FILES_COLLECTION } from "../lib/files.js";
@@ -11,7 +13,7 @@ import {
   type ResponseHeaderSettings,
 } from "../lib/responseHeaders.js";
 
-const app = new Hono();
+const app = new Hono<AppEnv>();
 
 app.put("/:id/headers", async (c) => {
   if (!isSameOriginBrowserRequest(c)) {
@@ -36,7 +38,11 @@ app.put("/:id/headers", async (c) => {
   const doc = await docRef.get();
   if (!doc.exists) return c.json({ error: "Not Found" }, 404);
 
-  const before: ResponseHeaderSettings | undefined = doc.data()!.responseHeaders;
+  const user = getUser(c);
+  const data = doc.data()!;
+  if (!canManage(user, data)) return c.json({ error: "Forbidden" }, 403);
+
+  const before: ResponseHeaderSettings | undefined = data.responseHeaders;
   const after = parsed.data;
   const empty = Object.keys(after).length === 0;
 
@@ -45,10 +51,11 @@ app.put("/:id/headers", async (c) => {
     responseHeaders: empty ? FieldValue.delete() : after,
   });
 
-  // 認証が無いため「誰が」は記録できない。残せるのは「いつ・どの IP から・何を」まで。
+  // 「いつ・誰が・どの IP から・何を」を残す。誰が（actor）はセッションのメールアドレス。
   logger.info({
     event: "headers.updated",
     fileId: id,
+    actor: user.email,
     clientIp: getClientIp(c),
     before: before ?? null,
     after: empty ? null : after,

@@ -1,4 +1,7 @@
 import { Hono } from "hono";
+import { getUser, type AppEnv } from "../lib/auth.js";
+import { canManage } from "../lib/ownership.js";
+import type { SessionUser } from "../lib/session.js";
 import { Style } from "hono/css";
 import { raw } from "hono/html";
 import {
@@ -47,6 +50,10 @@ import {
   tokenListClass,
   riskBadgeClass,
   formActionsClass,
+  topBarClass,
+  userBarClass,
+  listToolbarClass,
+  ownerCellClass,
 } from "./webStyles.js";
 
 const JST_FORMATTER = new Intl.DateTimeFormat("sv-SE", {
@@ -94,7 +101,7 @@ export function Layout(props: { children: unknown; script?: string }) {
   );
 }
 
-function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
+function FileTable(props: { files: FileEntry[]; emptyMessage: string; user: SessionUser }) {
   if (props.files.length === 0) {
     return (
       <div class={emptyClass}>
@@ -109,6 +116,7 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
         <thead>
           <tr>
             <th>タイトル</th>
+            <th>所有者</th>
             <th>共有</th>
             <th>有効期限</th>
             <th>作成日時</th>
@@ -130,6 +138,9 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
                     {file.description}
                   </span>
                 ) : null}
+              </td>
+              <td class={ownerCellClass}>
+                {file.owner ? <span title={file.owner.email}>{file.owner.name}</span> : "-"}
               </td>
               <td>
                 <div class={shareCellClass}>
@@ -157,13 +168,21 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string }) {
                   ボタンだけが他の列より上にずれる。
                 */}
                 <div class={shareCellClass}>
-                  <a class={ghostButtonClass} href={`/files/${file.id}/headers/edit`}>
-                    ヘッダ設定
-                  </a>
-                  <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
-                    削除
-                  </button>
-                  <span class={rowErrorClass} data-row-error></span>
+                  {/*
+                    他人のファイルには操作を出さない。サーバー側でも 403 にするが、
+                    押せるのに必ず失敗するボタンを見せないためここでも絞る。
+                  */}
+                  {canManage(props.user, { ownerEmail: file.owner?.email }) ? (
+                    <>
+                      <a class={ghostButtonClass} href={`/files/${file.id}/headers/edit`}>
+                        ヘッダ設定
+                      </a>
+                      <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
+                        削除
+                      </button>
+                      <span class={rowErrorClass} data-row-error></span>
+                    </>
+                  ) : null}
                 </div>
               </td>
             </tr>
@@ -212,12 +231,28 @@ function UploadForm() {
   );
 }
 
-const app = new Hono();
+function UserBar(props: { user: SessionUser }) {
+  return (
+    <div class={userBarClass}>
+      <span>{props.user.email}</span>
+      <form method="post" action="/auth/logout">
+        <button type="submit" class={ghostButtonClass}>
+          ログアウト
+        </button>
+      </form>
+    </div>
+  );
+}
+
+const app = new Hono<AppEnv>();
 
 app.get("/", async (c) => {
+  const user = getUser(c);
+  // mine=1 以外の値は絞り込みなしとして扱う（不正な値で一覧が空になるよりは全件を見せる）
+  const mine = c.req.query("mine") === "1";
   let files: FileEntry[];
   try {
-    files = await listFiles(resolveBaseUrl(c));
+    files = await listFiles(resolveBaseUrl(c), mine ? { ownerEmail: user.email } : undefined);
   } catch {
     return c.html(
       <Layout>
@@ -238,9 +273,15 @@ app.get("/", async (c) => {
 
   return c.html(
     <Layout script={CLIENT_SCRIPT}>
-      <h1 class={headerClass}>Tim</h1>
+      <div class={topBarClass}>
+        <h1 class={headerClass}>Tim</h1>
+        <UserBar user={user} />
+      </div>
       <UploadForm />
-      <FileTable files={live} emptyMessage={emptyMessage} />
+      <div class={listToolbarClass}>
+        {mine ? <a href="/">全員のファイル</a> : <a href="/?mine=1">自分のファイルだけ</a>}
+      </div>
+      <FileTable files={live} emptyMessage={emptyMessage} user={user} />
     </Layout>
   );
 });
@@ -376,6 +417,21 @@ app.get("/files/:id/headers/edit", async (c) => {
   }
 
   const data = doc.data()!;
+
+  // フォームを見せてから PUT で弾くと、必ず失敗する画面になる
+  if (!canManage(getUser(c), data)) {
+    return c.html(
+      <Layout>
+        <h1 class={headerClass}>Tim</h1>
+        <p class={errorPageClass}>このファイルのヘッダ設定は所有者だけが変更できます。</p>
+        <p>
+          <a href="/">← 一覧に戻る</a>
+        </p>
+      </Layout>,
+      403
+    );
+  }
+
   const settings: ResponseHeaderSettings | undefined = data.responseHeaders;
 
   return c.html(

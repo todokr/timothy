@@ -10,16 +10,23 @@ vi.mock("../lib/storage.js", async (importOriginal) => ({
   deleteFile: vi.fn(),
 }));
 
-import app from "./delete.js";
+import deleteApp from "./delete.js";
+import { TEST_USER, withUser } from "../test/auth.js";
+
+const app = withUser(deleteApp);
 import { db } from "../lib/firebase.js";
 import { deleteFile } from "../lib/storage.js";
 
-function mockDoc(exists: boolean, storagePath = "timothy-files/01ABC.html") {
+function mockDoc(
+  exists: boolean,
+  storagePath = "timothy-files/01ABC.html",
+  extra: Record<string, unknown> = {}
+) {
   const deleteMock = vi.fn().mockResolvedValue(undefined);
   const docRef = {
     get: vi.fn().mockResolvedValue({
       exists,
-      data: () => ({ storagePath }),
+      data: () => ({ storagePath, ...extra }),
     }),
     delete: deleteMock,
   };
@@ -44,6 +51,33 @@ describe("DELETE /files/:id", () => {
     const res = await request("01MISSING");
     expect(res.status).toBe(404);
     expect(deleteFile).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete someone else's file and touches nothing", async () => {
+    const { deleteMock } = mockDoc(true, "timothy-files/01ABC.html", { ownerEmail: "other@example.com" });
+    const res = await request("01ABC");
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "Forbidden" });
+    expect(deleteFile).not.toHaveBeenCalled();
+    expect(deleteMock).not.toHaveBeenCalled();
+  });
+
+  it("deletes your own file", async () => {
+    const { deleteMock } = mockDoc(true, "timothy-files/01ABC.html", { ownerEmail: TEST_USER.email });
+    const res = await request("01ABC");
+
+    expect(res.status).toBe(200);
+    expect(deleteFile).toHaveBeenCalledOnce();
+    expect(deleteMock).toHaveBeenCalledOnce();
+  });
+
+  it("deletes a legacy file without an owner", async () => {
+    const { deleteMock } = mockDoc(true);
+    const res = await request("01ABC");
+
+    expect(res.status).toBe(200);
+    expect(deleteMock).toHaveBeenCalledOnce();
   });
 
   it("deletes the stored object and the record", async () => {

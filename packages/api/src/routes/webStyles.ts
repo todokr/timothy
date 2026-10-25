@@ -542,3 +542,41 @@ export const fieldNoteClass = css`
   font-weight: 400;
   color: var(--gray-500);
 `;
+
+export const topBarClass = css`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-5);
+
+  h1 {
+    margin: 0;
+  }
+`;
+
+export const userBarClass = css`
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.8125rem;
+  color: var(--gray-700);
+
+  form {
+    margin: 0;
+  }
+`;
+
+export const listToolbarClass = css`
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 var(--space-3);
+  font-size: 0.8125rem;
+`;
+
+export const ownerCellClass = css`
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  color: var(--gray-700);
+`;
