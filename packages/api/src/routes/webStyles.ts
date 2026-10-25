@@ -580,3 +580,52 @@ export const ownerCellClass = css`
   font-size: 0.8125rem;
   color: var(--gray-700);
 `;
+
+// 共有ページの外枠。Layout の余白を無視して画面全体を使い、iframe を残りの高さいっぱいに広げる。
+export const viewerClass = css`
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--gray-0);
+`;
+
+export const viewerHeaderClass = css`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--gray-200);
+  background: var(--gray-25);
+  font-size: 0.8125rem;
+  color: var(--gray-700);
+
+  h1 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--gray-900);
+  }
+
+  select {
+    font: inherit;
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+    background: var(--gray-0);
+  }
+`;
+
+export const viewerNoticeClass = css`
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--danger-soft);
+  color: var(--danger);
+`;
+
+export const viewerFrameClass = css`
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: var(--gray-0);
+`;

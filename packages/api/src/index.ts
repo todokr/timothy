@@ -9,6 +9,7 @@ import deleteRoute from "./routes/delete.js";
 import versionsRoute from "./routes/versions.js";
 import headersRoute from "./routes/headers.js";
 import serveRoute from "./routes/serve.js";
+import viewerRoute from "./routes/viewer.js";
 import webRoute from "./routes/web.js";
 
 const app = new Hono<AppEnv>();
@@ -40,6 +41,7 @@ app.route("/files", deleteRoute);
 app.route("/files", versionsRoute);
 app.route("/files", headersRoute);
 app.route("/s", serveRoute);
+app.route("/s", viewerRoute);
 app.route("/", webRoute);
 
 app.get("/health", (c) => c.json({ status: "ok" }));
