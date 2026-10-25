@@ -345,7 +345,6 @@ describe("GET /files/:id/headers/edit", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.ALLOW_UNSANDBOXED_CONTENT;
   });
 
   it("returns 404 for an unknown id", async () => {
@@ -402,22 +401,16 @@ describe("GET /files/:id/headers/edit", () => {
     expect(html).toContain("マウスカーソルを固定");
   });
 
-  // The operator opts in at deploy time. Until then the option must not exist
-  // on the page at all — a disabled control still invites someone to look for
-  // a way around it.
-  it("omits allow-same-origin unless the operator enabled it", async () => {
-    mockDoc(true, undefined);
-    const html = await (await app.request("/files/01ABC/headers/edit")).text();
-    expect(html).not.toContain("allow-same-origin");
-  });
-
-  it("offers allow-same-origin with its consequence spelled out once enabled", async () => {
+  // The option is gone from the vocabulary; the old env var must not bring it back.
+  it("never offers allow-same-origin, even with the old env var set", async () => {
     process.env.ALLOW_UNSANDBOXED_CONTENT = "true";
-    mockDoc(true, undefined);
-    const html = await (await app.request("/files/01ABC/headers/edit")).text();
-
-    expect(html).toContain("allow-same-origin");
-    expect(html).toContain("全ファイルの一覧取得・閲覧・削除");
+    try {
+      mockDoc(true, undefined);
+      const html = await (await app.request("/files/01ABC/headers/edit")).text();
+      expect(html).not.toContain("allow-same-origin");
+    } finally {
+      delete process.env.ALLOW_UNSANDBOXED_CONTENT;
+    }
   });
 });
 

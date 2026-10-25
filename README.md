@@ -266,26 +266,7 @@ gcloud run services update timothy-api \
   --set-env-vars XFF_TRUSTED_HOPS=2
 ```
 
-### 6. （オプション）sandbox解除の許可
-
-`ALLOW_UNSANDBOXED_CONTENT=true` を設定すると、ヘッダ設定に `allow-same-origin` が
-選べるようになります。**未設定の場合、この項目はUIにもAPIにも存在しません。**
-
-⚠️ **このトークンを有効にしたコンテンツは、管理画面と同じオリジンで動きます。**
-そのHTML内のスクリプトが、IP許可リストの内側から
-`/files`（全ファイルの一覧取得）・`/upload`・`DELETE /files/<id>` を実行できます。
-つまり**1つのレポートがインスタンス全体のファイルを閲覧・削除できる**ということです。
-
-WebUSBなど、権限を要求するブラウザAPIを使うコンテンツを配信する場合にのみ有効化してください
-（これらのAPIは `sandbox` 下では動作しません）。
-
-```bash
-gcloud run services update timothy-api \
-  --region ${REGION} \
-  --set-env-vars ALLOW_UNSANDBOXED_CONTENT=true
-```
-
-### 7. CLIの設定
+### 6. CLIの設定
 
 ユーザーはCloud RunサービスのURLを使ってCLIを設定します:
 

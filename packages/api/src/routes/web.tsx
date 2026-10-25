@@ -264,8 +264,6 @@ const TOKEN_DESCRIPTION: Record<SandboxToken, string> = {
   "allow-forms": "レポートが入力内容を外部サイトへ送信できます",
   "allow-popups-to-escape-sandbox": "レポートが開いたタブがこの制限の外に出ます",
   "allow-top-navigation": "レポートが閲覧者を任意のサイトへ勝手に移動させられます",
-  "allow-same-origin":
-    "このインスタンスの全ファイルの一覧取得・閲覧・削除がレポートから可能になります",
 };
 
 const SOURCE_LABEL: Record<SourceKey, string> = {
@@ -331,8 +329,8 @@ function SettingsForm(props: { settings?: ResponseHeaderSettings }) {
           ))}
         </select>
         <span class={fieldNoteClass}>
-          有効期限までの max-age は自動で付きます。public は CDN やプロキシなど共有キャッシュにも
-          保存されるため、期限が切れてもキャッシュ上のコピーは消せません。
+          有効期限までの max-age は自動で付きます。CDN やプロキシなど共有キャッシュには
+          保存させません。
         </span>
       </label>
 

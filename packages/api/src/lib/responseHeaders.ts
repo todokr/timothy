@@ -6,8 +6,8 @@
  * インライン実行の許可）は設定側から到達できない。
  *
  * 危険な値はバリデーションで弾くのではなく、そもそも設定の語彙に存在させない。
- * `allow-same-origin` は運用者が許可しない限り語彙に現れず、床のヘッダ名には
- * スロットが無い。
+ * `allow-same-origin` は語彙に存在せず、床のヘッダ名にはスロットが無い。
+ * ログイン済みの閲覧者のセッションを同一オリジンの JS が使えてしまうため。
  */
 
 /**
@@ -31,8 +31,8 @@ export const DEFAULT_SANDBOX_TOKENS = [
  *   caution … 閲覧者を外部へ連れて行ける／送信経路が増える
  *   danger  … 隔離そのものを弱める
  *
- * 危険度の対応表なので allow-same-origin も含む。実際に選べるかどうかは
- * availableSandboxTokens() が決める。
+ * allow-same-origin は含めない。同一オリジンで動く HTML は閲覧者のログイン
+ * セッションで管理画面の API を呼べてしまい、UI の警告では受け止められない。
  */
 export const SANDBOX_TOKEN_RISK = {
   "allow-scripts": "safe",
@@ -46,41 +46,23 @@ export const SANDBOX_TOKEN_RISK = {
   "allow-forms": "danger",
   "allow-popups-to-escape-sandbox": "danger",
   "allow-top-navigation": "danger",
-  "allow-same-origin": "danger",
 } as const satisfies Record<string, "safe" | "caution" | "danger">;
 
 export type SandboxToken = keyof typeof SANDBOX_TOKEN_RISK;
 
 /**
- * 運用者が環境変数で許可しない限り設定できないトークン。
- *
- * allow-same-origin を付けると配信中の HTML が管理画面と同一オリジンになり、
- * その中の JS が /files の列挙・/upload・DELETE /files/:id を
- * IP 許可リストの内側から実行できる。UI の警告で受け止められる範囲を
- * 超えるので、デプロイ時の明示的な許可を前提にする。
- */
-const GATED_SANDBOX_TOKENS = ["allow-same-origin"] as const;
-
-export function unsandboxedContentAllowed(): boolean {
-  return process.env.ALLOW_UNSANDBOXED_CONTENT === "true";
-}
-
-/**
- * いま設定できるトークン。ゲートは書き込みと読み取りの両方でこれを使う。
- * 片側だけだと「許可中に保存 → 許可を外しても配信され続ける」形になる。
+ * いま設定できるトークン。書き込みと読み取りの両方でこれを使う。
+ * 片側だけだと、語彙から外したトークンが保存済みの設定として配信され続ける。
  */
 export function availableSandboxTokens(): readonly SandboxToken[] {
-  const base = (Object.keys(SANDBOX_TOKEN_RISK) as SandboxToken[]).filter(
-    (token) => !(GATED_SANDBOX_TOKENS as readonly string[]).includes(token)
-  );
-  return unsandboxedContentAllowed() ? [...base, ...GATED_SANDBOX_TOKENS] : base;
+  return Object.keys(SANDBOX_TOKEN_RISK) as SandboxToken[];
 }
 
 /** 追加のオリジンを指定できるディレクティブ。 */
 export const SOURCE_KEYS = ["script", "style", "img", "font", "connect"] as const;
 export type SourceKey = (typeof SOURCE_KEYS)[number];
 
-export const CACHE_CONTROL_VALUES = ["no-store", "private", "public"] as const;
+export const CACHE_CONTROL_VALUES = ["no-store", "private"] as const;
 export const REFERRER_POLICY_VALUES = [
   "no-referrer",
   "same-origin",
@@ -289,9 +271,12 @@ export type BuiltHeaders = {
 const INDEFINITE_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 /**
- * `public` は共有キャッシュに残るため、有効期限までの残り秒数を max-age に入れる。
- * これが無いとブラウザや中間キャッシュがヒューリスティックに期間を決め、
+ * 有効期限までの残り秒数を max-age に入れる。
+ * これが無いとブラウザがヒューリスティックに期間を決め、
  * TTL 経過後もキャッシュから配信され続けうる。
+ *
+ * `public` は認証済みの中身を共有キャッシュに載せうるため廃止した。
+ * 廃止前に保存された `public` は `private` として配信する。
  */
 function cacheControlValue(
   value: ResponseHeaderSettings["cacheControl"],
@@ -305,7 +290,7 @@ function cacheControlValue(
     expiresAt === null
       ? INDEFINITE_MAX_AGE_SECONDS
       : Math.max(0, Math.floor((expiresAt.getTime() - nowMs) / 1000));
-  return `${value}, max-age=${maxAge}`;
+  return `private, max-age=${maxAge}`;
 }
 
 /** expiresAt が null のときは無期限。 */
