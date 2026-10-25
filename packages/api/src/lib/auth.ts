@@ -10,6 +10,20 @@ import { readSessionCookie, type SessionUser } from "./session.js";
 export type AppEnv = { Variables: { user: SessionUser } };
 
 /**
+ * メールアドレスのドメイン（最後の "@" より後ろ）が許可ドメインに含まれるか。
+ *
+ * セッション Cookie は最大 7 日、CLI トークンは 90 日有効なため、発行後に
+ * ALLOWED_EMAIL_DOMAINS から外したドメインのユーザーが使い続けられてしまう。
+ * 毎リクエストこれで再確認する。文字列比較だけで I/O は無い。
+ */
+export function isAllowedEmailDomain(email: string, allowedDomains: string[]): boolean {
+  const at = email.lastIndexOf("@");
+  if (at < 0) return false;
+  const domain = email.slice(at + 1).toLowerCase();
+  return domain !== "" && allowedDomains.includes(domain);
+}
+
+/**
  * 認証を要求するミドルウェア。
  *
  * - `redirect`: ブラウザで開くページ向け。ログイン後に元のページへ戻れるよう next を付けて送る。
@@ -40,7 +54,8 @@ export function requireUser(onMissing: "redirect" | "json"): MiddlewareHandler<A
       const token = readBearerToken(c.req.header("authorization"));
       if (token) user = await findCliTokenUser(token);
     }
-    if (user) {
+    // 発行後に許可ドメインから外された場合は、資格情報が無いものとして扱う
+    if (user && isAllowedEmailDomain(user.email, config.allowedDomains)) {
       c.set("user", user);
       await next();
       return;

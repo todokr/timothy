@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { randomBytes } from "node:crypto";
-import { redirectUri, safeNextPath } from "../lib/auth.js";
+import { isAllowedEmailDomain, redirectUri, safeNextPath } from "../lib/auth.js";
 import { loadAuthConfig } from "../lib/authConfig.js";
 import { findCliTokenUser, issueCliToken, readBearerToken, revokeCliToken } from "../lib/cliTokens.js";
 import {
@@ -250,7 +250,10 @@ app.delete("/cli-token", async (c) => {
   const token = readBearerToken(c.req.header("authorization"));
   if (!token) return c.json({ error: "Unauthorized" }, 401);
   const user = await findCliTokenUser(token);
-  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  // 許可ドメインから外れたユーザーは requireUser と同じく資格情報なしとして扱う
+  if (!user || !isAllowedEmailDomain(user.email, loadAuthConfig().allowedDomains)) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
   await revokeCliToken(token);
   logger.info({ event: "auth.cli_token_revoked", email: user.email });
   return c.body(null, 204);

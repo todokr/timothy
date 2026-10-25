@@ -371,6 +371,15 @@ describe("GET /files/:id/headers/edit", () => {
     expect(await res.text()).toContain('id="settings-form"');
   });
 
+  // 旧値 "public" は配信時に private 扱いなので、フォームも private を選んでおく。
+  // 未選択のまま他の項目だけ保存すると、キャッシュ設定が黙って消えてしまう
+  it("preselects private when the stored cacheControl is the legacy public", async () => {
+    mockDoc(true, { cacheControl: "public" });
+    const html = await (await app.request("/files/01ABC/headers/edit")).text();
+    expect(html).toMatch(/<option[^>]*value="private"[^>]*selected/);
+    expect(html).not.toMatch(/<option[^>]*value="no-store"[^>]*selected/);
+  });
+
   // The page shows the policy actually being sent rather than describing it, so
   // a mismatch between the copy and the behaviour cannot develop.
   it("shows the policy currently in effect", async () => {

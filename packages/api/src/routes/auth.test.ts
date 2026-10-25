@@ -391,6 +391,13 @@ describe("DELETE /auth/cli-token", () => {
     expect(revokeCliToken).not.toHaveBeenCalled();
   });
 
+  it("returns 401 and keeps the token when its user is outside the allowed domains", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue({ email: "a@removed.example", name: "A", picture: null });
+    const res = await deleteToken({ authorization: "Bearer tok_123" });
+    expect(res.status).toBe(401);
+    expect(revokeCliToken).not.toHaveBeenCalled();
+  });
+
   it("does not look up an absurdly long token", async () => {
     const res = await deleteToken({ authorization: `Bearer ${"a".repeat(513)}` });
     expect(res.status).toBe(401);

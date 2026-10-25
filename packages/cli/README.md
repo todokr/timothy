@@ -1,6 +1,6 @@
 # timothy-cli
 
-A CLI tool to upload LLM-generated HTML and share it via time-limited URLs. Only people who know the URL can view the file — no login required for viewers. Uploading, listing and deleting require a Google login.
+A CLI tool to upload LLM-generated HTML and share it via time-limited URLs. Viewing a shared URL, uploading, listing and deleting all require a Google login on an allowed email domain (run `tim login` once for the CLI).
 
 Requires a self-hosted instance of `@timothy/api`. See the [repository README](https://github.com/incident-buddy/timothy-cli) for self-hosting instructions.
 

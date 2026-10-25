@@ -316,6 +316,10 @@ const SOURCE_LABEL: Record<SourceKey, string> = {
 };
 
 function SettingsForm(props: { settings?: ResponseHeaderSettings }) {
+  // 旧値 "public" は配信時に private として扱われる。未選択で表示すると、
+  // 他の項目だけ保存したときにキャッシュ設定が黙って消えるため private を選んでおく
+  const storedCache: string | undefined = props.settings?.cacheControl;
+  const selectedCache = storedCache === "public" ? "private" : storedCache;
   const tokens = props.settings?.sandbox;
   return (
     <form id="settings-form" class={formClass}>
@@ -364,7 +368,7 @@ function SettingsForm(props: { settings?: ResponseHeaderSettings }) {
         <select data-field="cacheControl">
           <option value="">設定しない</option>
           {CACHE_CONTROL_VALUES.map((value) => (
-            <option key={value} value={value} selected={props.settings?.cacheControl === value}>
+            <option key={value} value={value} selected={selectedCache === value}>
               {value}
             </option>
           ))}

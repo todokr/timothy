@@ -11,7 +11,7 @@ vi.mock("./cliTokens.js", async (importOriginal) => ({
 }));
 
 import { Hono } from "hono";
-import { getUser, requireUser, redirectUri, safeNextPath, type AppEnv } from "./auth.js";
+import { getUser, isAllowedEmailDomain, requireUser, redirectUri, safeNextPath, type AppEnv } from "./auth.js";
 import { loadAuthConfig } from "./authConfig.js";
 import { SESSION_COOKIE, readSessionCookie, setSessionCookie } from "./session.js";
 import { signValue } from "./signedCookie.js";
@@ -168,6 +168,46 @@ describe("requireUser with a bearer token", () => {
       expect(findCliTokenUser).not.toHaveBeenCalled();
     },
   );
+});
+
+// 許可ドメインから外した後も、発行済みのセッション・トークンが残り続けないことを確かめる
+describe("requireUser domain re-check", () => {
+  const REMOVED = { email: "a@removed.example", name: "A", picture: null };
+
+  afterEach(() => {
+    vi.mocked(findCliTokenUser).mockReset();
+  });
+
+  it("rejects a valid session whose domain is no longer allowed (json)", async () => {
+    const res = await appWith("json").request("/x", { headers: { cookie: sessionCookieHeader(REMOVED) } });
+    expect(res.status).toBe(401);
+  });
+
+  it("redirects a valid session whose domain is no longer allowed (redirect)", async () => {
+    const res = await appWith("redirect").request("/s/x", { headers: { cookie: sessionCookieHeader(REMOVED) } });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("/auth/login");
+  });
+
+  it("rejects a CLI token whose stored user is outside the allowed domains", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(REMOVED);
+    const res = await appWith("json").request("/x", { headers: { authorization: "Bearer tok_1" } });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe("isAllowedEmailDomain", () => {
+  it.each([
+    ["a@example.com", ["example.com"], true],
+    ["a@EXAMPLE.com", ["example.com"], true],
+    ["a@removed.example", ["example.com"], false],
+    ["a@sub.example.com", ["example.com"], false],
+    ["a@b@example.com", ["example.com"], true],
+    ["example.com", ["example.com"], false],
+    ["a@", ["example.com"], false],
+  ])("%s in %j -> %s", (email, domains, expected) => {
+    expect(isAllowedEmailDomain(email, domains)).toBe(expected);
+  });
 });
 
 describe("readSessionCookie", () => {
