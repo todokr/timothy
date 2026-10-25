@@ -91,6 +91,42 @@ tim delete <id>
 tim delete <id> --force
 ```
 
+## MCP server (`tim mcp`)
+
+`tim mcp` runs an MCP server over stdio so an agent such as Claude Code can read review comments on your shared pages, reply to them and upload a revised version. It uses the endpoint and credentials saved by `tim setup` and `tim login`, so run both first (otherwise tool calls fail with `Not logged in. Run \`tim login\`.`).
+
+Register it with Claude Code:
+
+```bash
+claude mcp add timothy -- tim mcp
+```
+
+Other MCP clients take the same command in their server config:
+
+```json
+{"command": "tim", "args": ["mcp"]}
+```
+
+Then ask the agent, for example: "timothy の https://your-api.example.com/s/01JWXYZ... のコメントを見て直して" ("look at the comments on this timothy page and fix them"). The same workflow is available as the prompt `address_comments` (argument `file`: a file ID or share URL) and is also sent as the server's instructions.
+
+In every tool, `file` is a file ID (ULID) or a share URL.
+
+| Tool | What it does |
+|---|---|
+| `list_files` | Lists the files you uploaded (like `tim list --mine`) |
+| `get_file` | Returns the file info (title, version list) and the stored HTML. `version` defaults to the latest |
+| `list_comments` | Returns comments across all versions. Unresolved only by default; `includeResolved: true` adds resolved ones |
+| `reply_to_comment` | Replies to a comment (`file`, `commentId`, `body` of 1 to 10,000 characters) |
+| `upload_revision` | Uploads a revision and returns the new version number and URL. Pass the HTML as either `path` (a local file) or `html` (a string), not both |
+
+Notes:
+
+- Comments cannot be resolved, and new comments cannot be created, through `tim mcp`. Resolving is left to the reviewer.
+- Replies are recorded as coming from an agent and show up as "（agent 経由）" on the shared page.
+- `get_file` returns the stored HTML as uploaded; the bridge script injected at serve time is not included.
+- Element comments carry `tag` and `text` but no DOM `path` (a path refers to the DOM after scripts ran and does not match the stored HTML). Whether a comment is outdated is not reported; the agent compares it against the latest HTML.
+- `upload_revision` follows the same rule as `tim upload --to`: only the owner can upload a revision.
+
 ## Publishing (maintainers)
 
 Build and publish to npm:

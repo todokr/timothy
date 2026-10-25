@@ -199,10 +199,65 @@ tim delete <id> --force
 
 `tim` のトークンでは新規コメントも解決もできません。CLI（agent）からできるのは返信だけで、
 返信には「（agent 経由）」と付きます。API は [packages/api/README.md](packages/api/README.md#コメント-api) を参照してください。
+agent からコメントに対応させる方法は [agent からコメントに対応する（tim mcp）](#agent-からコメントに対応するtim-mcp) を参照してください。
 
 > **コメントと sandbox:** 本文を選んでコメントする処理は、本文の中で動くスクリプトに依存します。
 > 「ヘッダ設定」で `sandbox` から `allow-scripts` を外したファイルでは本文でのコメントができなくなり、
 > 「要素を選んでコメント」も使えません（パネルにもその旨が出ます）。
+
+## agent からコメントに対応する（tim mcp）
+
+`tim mcp` は、Claude Code などの MCP クライアントから timothy のコメントを確認し、返信し、修正版を上げるための
+MCP サーバーです。標準入出力（stdio）で動き、`tim` に保存済みの設定と資格情報を使います。
+先に `tim setup` と `tim login` を済ませてください（未ログインのままだと、ツールを呼んだときに
+`Not logged in. Run \`tim login\`.` で失敗します）。
+
+### 登録
+
+Claude Code の場合:
+
+```bash
+claude mcp add timothy -- tim mcp
+```
+
+その他の MCP クライアントでは、サーバーの設定に次のコマンドを登録します:
+
+```json
+{"command": "tim", "args": ["mcp"]}
+```
+
+### 使い方
+
+登録したら、agent に次のように頼みます:
+
+```
+timothy の https://your-api.example.com/s/01JWXYZ... のコメントを見て直して
+```
+
+agent は、未解決のコメントを読み、手元の HTML を直し、修正版を上げ、対応したコメントに返信します。
+手順は prompt `address_comments`（引数 `file` にファイルの ID か共有 URL）としても呼び出せます。
+同じ手順がサーバーの instructions にも入っています。
+
+### ツール
+
+`file` にはファイルの ID（ULID）か共有 URL（`?v=` 付きも可）を指定します。
+
+| ツール | 内容 |
+|---|---|
+| `list_files` | 自分がアップロードしたファイルの一覧（`tim list --mine` 相当） |
+| `get_file` | ファイルの情報（タイトル・版の一覧）と保存された HTML。`version` を省くと最新版 |
+| `list_comments` | コメントを全部の版の分まとめて返す。既定は未解決のみで、`includeResolved: true` で解決済みも含める |
+| `reply_to_comment` | コメントに返信する（`file`・`commentId`・`body`。1〜10,000 文字） |
+| `upload_revision` | 修正版を上げ、新しい版の番号と URL を返す。本文は `path`（HTML ファイルのパス）か `html`（文字列）のどちらか 1 つ |
+
+- **解決はできません。** コメントを解決にするツールはありません。解決はレビュアーが判断します。
+  新規コメントもできません。
+- 返信は agent 経由として記録され、共有ページには「（agent 経由）」と付いて表示されます。
+- `get_file` が返す HTML は保存されたままの本文で、配信時に差し込まれるブリッジは含みません。
+- `list_comments` の要素コメントには `tag` と `text` が入り、`path` は入りません
+  （`path` は JS 実行後の DOM での位置で、保存された HTML とは対応しないためです）。
+  Outdated かどうかも返さないので、agent が最新版の HTML と突き合わせて判断します。
+- `upload_revision` は `tim upload --to` と同じく、所有者だけが上げられます。
 
 ## セルフホスティング
 
@@ -248,7 +303,7 @@ firebase deploy --only firestore
 
 これにより以下が適用されます:
 - `firestore.rules` — クライアントからの直接アクセスを禁止
-- `firestore.indexes.json` — `tim list` で使用する `htmlFiles` の複合インデックス（userId + createdAt）
+- `firestore.indexes.json` — `htmlFiles` の複合インデックス（userId + createdAt）。現在の `tim list` は `createdAt` の単一フィールドで並べるため、このインデックスを使いません
 
 **Cloud Storageバケットの作成:**
 
@@ -359,7 +414,7 @@ gcloud run services update timothy-api \
 ```
 
 `ALLOWED_IPS` はWeb UI（`/`）、管理系エンドポイント（`/upload`、`/files`、`/files/<id>`）、
-共有エンドポイント（`/s/*`）に適用されます。**未設定の場合はIPアドレスによる制限はかかりません**（ログインは別途必要です）。設定すると
+共有エンドポイント（`/s/*`）、ログイン用のエンドポイント（`/auth/*`）に適用されます。**未設定の場合はIPアドレスによる制限はかかりません**（ログインは別途必要です）。設定すると
 CLIからのアクセスも、共有URLを開く相手も、このIPアドレスに制限される点に注意してください。
 
 ※ クライアントIPは `X-Forwarded-For` の**末尾から** `XFF_TRUSTED_HOPS` 個目のエントリから
@@ -369,7 +424,7 @@ CLIからのアクセスも、共有URLを開く相手も、このIPアドレス
 
 | 環境変数 | 既定値 | 意味 |
 |---|---|---|
-| `ALLOWED_IPS` | 未設定（IP 制限なし。ログインは必須） | `/`、`/upload`、`/files`、`/files/<id>`、`/s/*` へのアクセスを許可するIP・CIDRのカンマ区切り |
+| `ALLOWED_IPS` | 未設定（IP 制限なし。ログインは必須） | `/`、`/upload`、`/files`、`/files/<id>`、`/s/*`、`/auth/*` へのアクセスを許可するIP・CIDRのカンマ区切り |
 | `XFF_TRUSTED_HOPS` | `1` | サービスの前段で `X-Forwarded-For` に追記するプロキシの段数。末尾からこの数だけ遡ったエントリをクライアントIPとして採用する |
 
 既定値の `1` は、`*.run.app` の素のCloud Runサービス（およびLambda Function URL）のように

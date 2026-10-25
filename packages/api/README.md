@@ -80,6 +80,21 @@ body に余計なフィールドがある・形が不正なときは `400`。
 
 ---
 
+## ファイル情報・本文 API
+
+ファイルの情報と保存された本文を JSON で返す API。`tim mcp` が使う。ログイン済み（セッションまたは CLI トークン）なら
+所有者でなくても使える。親ファイルが無ければ `404`、期限切れなら `410`（期限切れの判定は版の検証より先）。
+
+| メソッド・パス | 内容 |
+|---|---|
+| `GET /files/:id` | ファイルの情報を返す。`id`・`title`・`description`・`url`（共有 URL）・`owner`（`{ email, name }`、所有者がいなければ `null`）・`expiresAt`（無期限なら `null`）・`latestVersion`・`versions`（`[{ version, createdAt, uploadedBy }]`） |
+| `GET /files/:id/content` | 保存された HTML を `{ id, version, html }` で返す。`?v=<版>` で版を指定し、省くと最新版。存在しない版・不正な `v` は `404`。`Cache-Control: no-store` |
+
+`/files/:id/content` の `html` は Cloud Storage に保存されたままの本文で、配信時に差し込まれるブリッジは含まない
+（`/s/:id/v/:n` が返す HTML とは異なる）。
+
+---
+
 ## Cloud Run デプロイ
 
 ### 前提条件
