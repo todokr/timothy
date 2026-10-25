@@ -5,10 +5,16 @@ vi.mock("./lib/firebase.js", () => ({
   storage: { bucket: vi.fn() },
 }));
 
+vi.mock("./lib/cliTokens.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./lib/cliTokens.js")>()),
+  findCliTokenUser: vi.fn(),
+}));
+
 import app from "./index.js";
 import { db } from "./lib/firebase.js";
 import { signValue } from "./lib/signedCookie.js";
 import { TEST_USER, sessionCookieHeader } from "./test/auth.js";
+import { findCliTokenUser } from "./lib/cliTokens.js";
 
 const DENIED_IP = "203.0.113.9";
 
@@ -59,6 +65,9 @@ describe("IP allowlist coverage", () => {
     expect((await request("/auth/login")).status).toBe(403);
     expect((await request("/auth/callback")).status).toBe(403);
     expect((await request("/auth/logout", "POST")).status).toBe(403);
+    expect((await request("/auth/cli")).status).toBe(403);
+    expect((await request("/auth/cli", "POST")).status).toBe(403);
+    expect((await request("/auth/cli-token", "DELETE")).status).toBe(403);
   });
 
   it("does not block the health endpoint", async () => {
@@ -81,6 +90,21 @@ describe("without ALLOWED_IPS", () => {
 
   afterEach(() => {
     vi.mocked(db.collection).mockReset();
+    vi.mocked(findCliTokenUser).mockReset();
+  });
+
+  it("accepts a valid bearer token on /files", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(TEST_USER);
+    const res = await request("/files", "GET", { authorization: "Bearer tok_1" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ files: [] });
+    expect(findCliTokenUser).toHaveBeenCalledWith("tok_1");
+  });
+
+  it("returns 401 for a revoked token", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(null);
+    const res = await request("/files", "GET", { authorization: "Bearer tok_1" });
+    expect(res.status).toBe(401);
   });
 
   it("does not block the file list endpoint", async () => {
@@ -153,6 +177,23 @@ describe("authentication", () => {
     const res = await app.request(path, { method });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "Unauthorized" });
+  });
+
+  // auth.tsx は next を "/auth/cli?..." と決め打ちで組むので、実際のマウント先と一致することを確かめる
+  it("sends an anonymous CLI login to login and back to /auth/cli", async () => {
+    const res = await app.request("/auth/cli?port=53682&state=abcdefghijklmnop_-XY");
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(
+      "/auth/login?next=%2Fauth%2Fcli%3Fport%3D53682%26state%3Dabcdefghijklmnop_-XY",
+    );
+  });
+
+  it("shows the CLI login confirmation to a signed-in user", async () => {
+    const res = await app.request("/auth/cli?port=53682&state=abcdefghijklmnop_-XY", {
+      headers: { cookie: sessionCookieHeader() },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain(`${TEST_USER.email} として CLI にログインします`);
   });
 
   it("keeps /health open", async () => {

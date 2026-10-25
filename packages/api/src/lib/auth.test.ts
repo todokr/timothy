@@ -5,15 +5,21 @@ vi.mock("./firebase.js", () => ({
   db: { collection: vi.fn() },
 }));
 
+vi.mock("./cliTokens.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./cliTokens.js")>()),
+  findCliTokenUser: vi.fn(),
+}));
+
 import { Hono } from "hono";
 import { getUser, requireUser, redirectUri, safeNextPath, type AppEnv } from "./auth.js";
 import { loadAuthConfig } from "./authConfig.js";
 import { SESSION_COOKIE, readSessionCookie, setSessionCookie } from "./session.js";
 import { signValue } from "./signedCookie.js";
 import { TEST_USER, sessionCookieHeader, withUser } from "../test/auth.js";
+import { findCliTokenUser } from "./cliTokens.js";
 
 describe("safeNextPath", () => {
-  it.each(["/s/01ABC?v=2", "/", "/files/01ABC/headers/edit", "/s/01ABC?v=2#top"])("keeps a safe path %s", (p) => {
+  it.each(["/s/01ABC?v=2", "/", "/auth/cli?port=53682&state=abcdefghijklmnop_-XY", "/files/01ABC/headers/edit", "/s/01ABC?v=2#top"])("keeps a safe path %s", (p) => {
     expect(safeNextPath(p)).toBe(p);
   });
 
@@ -117,6 +123,51 @@ describe("requireUser", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(other);
   });
+});
+
+describe("requireUser with a bearer token", () => {
+  const CLI_USER = { email: "cli@example.com", name: "Cli", picture: null };
+
+  afterEach(() => {
+    vi.mocked(findCliTokenUser).mockReset();
+  });
+
+  it("sets the user from a valid bearer token", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(CLI_USER);
+    const res = await appWith("json").request("/x", { headers: { authorization: "Bearer tok_1" } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(CLI_USER);
+    expect(findCliTokenUser).toHaveBeenCalledWith("tok_1");
+  });
+
+  it("prefers the session cookie and skips the token lookup", async () => {
+    const res = await appWith("json").request("/x", {
+      headers: { cookie: sessionCookieHeader(), authorization: "Bearer tok_1" },
+    });
+    expect(await res.json()).toEqual(TEST_USER);
+    expect(findCliTokenUser).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 for a revoked token", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(null);
+    const res = await appWith("json").request("/x", { headers: { authorization: "Bearer tok_1" } });
+    expect(res.status).toBe(401);
+  });
+
+  it("redirects to login for an unknown token in redirect mode", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(null);
+    const res = await appWith("redirect").request("/s/01ABC", { headers: { authorization: "Bearer tok_1" } });
+    expect(res.status).toBe(302);
+  });
+
+  it.each(["tok_1", "Basic tok_1", "Bearer ", `Bearer ${"a".repeat(513)}`])(
+    "treats a malformed header %j as no credentials without a lookup",
+    async (header) => {
+      const res = await appWith("json").request("/x", { headers: { authorization: header } });
+      expect(res.status).toBe(401);
+      expect(findCliTokenUser).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("readSessionCookie", () => {

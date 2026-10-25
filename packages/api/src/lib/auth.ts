@@ -2,6 +2,7 @@ import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import type { MiddlewareHandler } from "hono";
 import { loadAuthConfig, type AuthConfig } from "./authConfig.js";
+import { findCliTokenUser, readBearerToken } from "./cliTokens.js";
 import { resolveBaseUrl } from "./files.js";
 import { logger } from "./logger.js";
 import { readSessionCookie, type SessionUser } from "./session.js";
@@ -32,8 +33,13 @@ export function requireUser(onMissing: "redirect" | "json"): MiddlewareHandler<A
       return c.json({ error: "Internal Server Error" }, 500);
     }
 
-    // 探す順序: Cookie → Authorization: Bearer（CLI 用。Task 5 で追加する）
-    const user = readSessionCookie(c, config);
+    // 探す順序: Cookie → Authorization: Bearer（CLI 用）。
+    // Cookie で決まれば Firestore を引かずに済む
+    let user = readSessionCookie(c, config);
+    if (!user) {
+      const token = readBearerToken(c.req.header("authorization"));
+      if (token) user = await findCliTokenUser(token);
+    }
     if (user) {
       c.set("user", user);
       await next();

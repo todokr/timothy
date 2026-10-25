@@ -10,12 +10,23 @@ vi.mock("../lib/google.js", async (importOriginal) => ({
   exchangeCode: vi.fn(),
 }));
 
+// readBearerToken は本物を使い、Firestore に触る関数だけ差し替える
+vi.mock("../lib/cliTokens.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/cliTokens.js")>()),
+  issueCliToken: vi.fn(),
+  findCliTokenUser: vi.fn(),
+  revokeCliToken: vi.fn(),
+}));
+
 import app from "./auth.js";
 import { exchangeCode } from "../lib/google.js";
 import { signValue, verifyValue } from "../lib/signedCookie.js";
 import { readSessionCookie, SESSION_COOKIE } from "../lib/session.js";
+import { safeNextPath } from "../lib/auth.js";
 import { loadAuthConfig } from "../lib/authConfig.js";
 import { Hono } from "hono";
+import { findCliTokenUser, issueCliToken, revokeCliToken } from "../lib/cliTokens.js";
+import { TEST_USER, sessionCookieHeader } from "../test/auth.js";
 
 const SECRET = "test-session-secret";
 
@@ -59,6 +70,9 @@ async function sessionFrom(res: Response) {
 
 beforeEach(() => {
   vi.mocked(exchangeCode).mockReset();
+  vi.mocked(issueCliToken).mockReset();
+  vi.mocked(findCliTokenUser).mockReset();
+  vi.mocked(revokeCliToken).mockReset();
 });
 
 describe("GET /auth/login", () => {
@@ -205,5 +219,181 @@ describe("POST /auth/logout", () => {
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/");
     expect(cookieNamed(res, SESSION_COOKIE)).toMatch(/^tim_session=; Max-Age=0/);
+  });
+});
+
+const STATE = "abcdefghijklmnop_-XY";
+
+describe("GET /auth/cli", () => {
+  function getCli(query: string, cookie: string | null = sessionCookieHeader()) {
+    return app.request(`/cli?${query}`, { headers: cookie ? { cookie } : {} });
+  }
+
+  it("GET /auth/cli shows a confirmation page and issues nothing", async () => {
+    const res = await getCli(`port=53682&state=${STATE}`);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain(`${TEST_USER.email} として CLI にログインします`);
+    expect(body).toContain('method="post"');
+    expect(body).toContain('action="/auth/cli"');
+    expect(body).toContain('name="port" value="53682"');
+    expect(body).toContain(`name="state" value="${STATE}"`);
+    // 確認ボタンを別サイトの透明な iframe 越しに押させる攻撃を防ぐ
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("content-security-policy")).toBe("frame-ancestors 'none'");
+    expect(issueCliToken).not.toHaveBeenCalled();
+  });
+
+  it("escapes the user name in the confirmation page", async () => {
+    const user = { email: "<b>x</b>@example.com", name: "x", picture: null };
+    const res = await getCli(`port=53682&state=${STATE}`, sessionCookieHeader(user));
+    const body = await res.text();
+    expect(body).not.toContain("<b>x</b>");
+    expect(body).toContain("&lt;b&gt;x&lt;/b&gt;@example.com");
+  });
+
+  it("redirects to login with the full path when there is no session", async () => {
+    const res = await getCli(`port=53682&state=${STATE}`, null);
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location).toBe(`/auth/login?next=${encodeURIComponent(`/auth/cli?port=53682&state=${STATE}`)}`);
+    // ログイン後に同じ確認ページへ戻れること
+    expect(safeNextPath(new URL(location, "http://x").searchParams.get("next") ?? "")).toBe(
+      `/auth/cli?port=53682&state=${STATE}`,
+    );
+    expect(issueCliToken).not.toHaveBeenCalled();
+  });
+
+  it.each(["80", "1023", "65536", "0", "-1", "53682abc", "5368.2", "", "１０２４", "0x1F90", "053682"])(
+    "GET /auth/cli rejects an out-of-range port %j",
+    async (port) => {
+      const res = await getCli(`port=${encodeURIComponent(port)}&state=${STATE}`);
+      expect(res.status).toBe(400);
+      expect(issueCliToken).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a missing port", async () => {
+    expect((await getCli(`state=${STATE}`)).status).toBe(400);
+  });
+
+  it.each(["short", "a".repeat(129), `${"a".repeat(16)}!`, `${"a".repeat(16)}<x>`, ""])(
+    "rejects an invalid state %j",
+    async (state) => {
+      const res = await getCli(`port=53682&state=${encodeURIComponent(state)}`);
+      expect(res.status).toBe(400);
+    },
+  );
+
+  it.each(["1024", "65535"])("accepts the boundary port %s", async (port) => {
+    expect((await getCli(`port=${port}&state=${STATE}`)).status).toBe(200);
+  });
+});
+
+describe("POST /auth/cli", () => {
+  function postCli(
+    fields: Record<string, string>,
+    headers: Record<string, string> = { cookie: sessionCookieHeader(), "sec-fetch-site": "same-origin" },
+  ) {
+    return app.request("/cli", { method: "POST", body: new URLSearchParams(fields), headers });
+  }
+
+  it("POST /auth/cli redirects to the loopback with token and state", async () => {
+    vi.mocked(issueCliToken).mockResolvedValue("tok_EN-123");
+    const res = await postCli({ port: "53682", state: STATE });
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe(`http://127.0.0.1:53682/callback?token=tok_EN-123&state=${STATE}`);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(issueCliToken).toHaveBeenCalledWith(TEST_USER);
+  });
+
+  it("URL-encodes the token in the loopback URL", async () => {
+    vi.mocked(issueCliToken).mockResolvedValue("a+b/c=&d");
+    const res = await postCli({ port: "53682", state: STATE });
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.searchParams.get("token")).toBe("a+b/c=&d");
+    expect(location.searchParams.get("state")).toBe(STATE);
+  });
+
+  it("POST /auth/cli refuses a cross-site request", async () => {
+    const res = await postCli(
+      { port: "53682", state: STATE },
+      { cookie: sessionCookieHeader(), "sec-fetch-site": "cross-site" },
+    );
+    expect(res.status).toBe(403);
+    expect(issueCliToken).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request without Sec-Fetch-Site", async () => {
+    const res = await postCli({ port: "53682", state: STATE }, { cookie: sessionCookieHeader() });
+    expect(res.status).toBe(403);
+    expect(issueCliToken).not.toHaveBeenCalled();
+  });
+
+  it("refuses to issue without a session", async () => {
+    const res = await postCli({ port: "53682", state: STATE }, { "sec-fetch-site": "same-origin" });
+    expect(res.status).toBe(401);
+    expect(issueCliToken).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { port: "80", state: STATE },
+    { port: "53682abc", state: STATE },
+    { port: "53682", state: "short" },
+    { state: STATE },
+    { port: "53682" },
+  ])("re-validates the form fields %j", async (fields) => {
+    const res = await postCli(fields as Record<string, string>);
+    expect(res.status).toBe(400);
+    expect(issueCliToken).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-form body", async () => {
+    const res = await app.request("/cli", {
+      method: "POST",
+      body: JSON.stringify({ port: "53682", state: STATE }),
+      headers: {
+        cookie: sessionCookieHeader(),
+        "sec-fetch-site": "same-origin",
+        "content-type": "application/json",
+      },
+    });
+    expect(res.status).toBe(400);
+    expect(issueCliToken).not.toHaveBeenCalled();
+  });
+});
+
+describe("DELETE /auth/cli-token", () => {
+  function deleteToken(headers: Record<string, string> = {}) {
+    return app.request("/cli-token", { method: "DELETE", headers });
+  }
+
+  it("DELETE /auth/cli-token revokes the presented token", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(TEST_USER);
+    const res = await deleteToken({ authorization: "Bearer tok_123" });
+    expect(res.status).toBe(204);
+    expect(findCliTokenUser).toHaveBeenCalledWith("tok_123");
+    expect(revokeCliToken).toHaveBeenCalledWith("tok_123");
+  });
+
+  it("returns 401 without a bearer token", async () => {
+    const res = await deleteToken();
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "Unauthorized" });
+    expect(findCliTokenUser).not.toHaveBeenCalled();
+    expect(revokeCliToken).not.toHaveBeenCalled();
+  });
+
+  it("returns 401 for an unknown or revoked token", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(null);
+    const res = await deleteToken({ authorization: "Bearer tok_123" });
+    expect(res.status).toBe(401);
+    expect(revokeCliToken).not.toHaveBeenCalled();
+  });
+
+  it("does not look up an absurdly long token", async () => {
+    const res = await deleteToken({ authorization: `Bearer ${"a".repeat(513)}` });
+    expect(res.status).toBe(401);
+    expect(findCliTokenUser).not.toHaveBeenCalled();
   });
 });

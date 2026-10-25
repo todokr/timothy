@@ -3,6 +3,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { randomBytes } from "node:crypto";
 import { redirectUri, safeNextPath } from "../lib/auth.js";
 import { loadAuthConfig } from "../lib/authConfig.js";
+import { findCliTokenUser, issueCliToken, readBearerToken, revokeCliToken } from "../lib/cliTokens.js";
 import {
   buildAuthorizeUrl,
   createPkcePair,
@@ -11,11 +12,17 @@ import {
   parseIdTokenClaims,
   type IdClaims,
 } from "../lib/google.js";
+import { isSameOriginBrowserRequest } from "../lib/http.js";
 import { logger } from "../lib/logger.js";
-import { clearSessionCookie, isHttpsRequest, setSessionCookie } from "../lib/session.js";
+import {
+  clearSessionCookie,
+  isHttpsRequest,
+  readSessionCookie,
+  setSessionCookie,
+} from "../lib/session.js";
 import { signValue, verifyValue } from "../lib/signedCookie.js";
 import { Layout } from "./web.js";
-import { errorPageClass, ghostButtonClass, headerClass } from "./webStyles.js";
+import { errorPageClass, ghostButtonClass, headerClass, submitButtonClass } from "./webStyles.js";
 
 const OAUTH_COOKIE = "tim_oauth";
 const OAUTH_TTL_SECONDS = 10 * 60;
@@ -62,6 +69,34 @@ function badRequest(c: Context) {
       </p>
     </Layout>,
     400,
+  );
+}
+
+// CLI が待ち受けるループバックのポート。特権ポートは CLI が使わないので受け付けない。
+// parseInt / Number は "53682abc" や "0x1F90" を通してしまうため、数字だけの形を先に確かめる
+const PORT_PATTERN = /^[1-9][0-9]{3,4}$/;
+const MIN_PORT = 1024;
+const MAX_PORT = 65535;
+// CLI が生成する state。ループバックの URL にそのまま載るので、URL・HTML で意味を持つ文字を含ませない
+const STATE_PATTERN = /^[A-Za-z0-9_-]{16,128}$/;
+
+type CliRequest = { port: number; state: string };
+
+function parseCliRequest(port: unknown, state: unknown): CliRequest | null {
+  if (typeof port !== "string" || !PORT_PATTERN.test(port)) return null;
+  const portNumber = Number(port);
+  if (portNumber < MIN_PORT || portNumber > MAX_PORT) return null;
+  if (typeof state !== "string" || !STATE_PATTERN.test(state)) return null;
+  return { port: portNumber, state };
+}
+
+function cliErrorPage(c: Context, message: string, status: 400 | 401 | 403) {
+  return c.html(
+    <Layout>
+      <h1 class={headerClass}>Tim</h1>
+      <p class={errorPageClass}>{message}</p>
+    </Layout>,
+    status,
   );
 }
 
@@ -144,6 +179,81 @@ app.get("/callback", async (c) => {
 app.post("/logout", (c) => {
   clearSessionCookie(c);
   return c.redirect("/", 302);
+});
+
+/**
+ * CLI ログインの確認ページ。
+ *
+ * GET ではトークンを発行しない。発行してしまうと、ログイン済みのユーザーに細工したリンクを
+ * 踏ませるだけでトークンが出てしまうため、本人がボタンを押す POST を必須にしている。
+ */
+app.get("/cli", (c) => {
+  const request = parseCliRequest(c.req.query("port"), c.req.query("state"));
+  if (!request) return cliErrorPage(c, "CLI のログイン要求が正しくありません。", 400);
+
+  const user = readSessionCookie(c, loadAuthConfig());
+  if (!user) {
+    // ログイン後にこの確認ページへ戻す。検証済みの値だけで組み直し、余計なクエリを持ち回らない
+    const back = `/auth/cli?port=${request.port}&state=${request.state}`;
+    return c.redirect(`/auth/login?next=${encodeURIComponent(back)}`, 302);
+  }
+
+  // 確認ボタンを別サイトの透明な iframe 越しに押させる（クリックジャッキング）のを防ぐ。
+  // iframe 内からの POST は Sec-Fetch-Site が same-origin になり、POST 側の検査では止められない
+  c.header("X-Frame-Options", "DENY");
+  c.header("Content-Security-Policy", "frame-ancestors 'none'");
+  return c.html(
+    <Layout>
+      <h1 class={headerClass}>Tim</h1>
+      <p>{user.email} として CLI にログインします</p>
+      <p>このページを CLI から開いた覚えがなければ、閉じてください。</p>
+      <form method="post" action="/auth/cli">
+        <input type="hidden" name="port" value={String(request.port)} />
+        <input type="hidden" name="state" value={request.state} />
+        <button type="submit" class={submitButtonClass}>
+          ログインする
+        </button>
+      </form>
+    </Layout>,
+  );
+});
+
+app.post("/cli", async (c) => {
+  // 別サイトのフォームから POST させてトークンを発行させる攻撃（CSRF）を防ぐ
+  if (!isSameOriginBrowserRequest(c)) return cliErrorPage(c, "このリクエストは受け付けられません。", 403);
+
+  const user = readSessionCookie(c, loadAuthConfig());
+  if (!user) return cliErrorPage(c, "ログインしてから、もう一度 CLI からやり直してください。", 401);
+
+  // フォームの値は書き換えられるので、GET で確かめた値でも改めて検証する
+  const contentType = c.req.header("content-type") ?? "";
+  if (!contentType.toLowerCase().startsWith("application/x-www-form-urlencoded")) {
+    return cliErrorPage(c, "CLI のログイン要求が正しくありません。", 400);
+  }
+  const body = await c.req.parseBody();
+  const request = parseCliRequest(body.port, body.state);
+  if (!request) return cliErrorPage(c, "CLI のログイン要求が正しくありません。", 400);
+
+  const token = await issueCliToken(user);
+  // 送り先はループバック固定。ホストを入力から組み立てないので、トークンが外部に送られることはない
+  const callback = new URL(`http://127.0.0.1:${request.port}/callback`);
+  callback.searchParams.set("token", token);
+  callback.searchParams.set("state", request.state);
+  logger.info({ event: "auth.cli_token_issued", email: user.email });
+  // Location にトークンが載るため、どこにもキャッシュさせない
+  c.header("Cache-Control", "no-store");
+  return c.redirect(callback.toString(), 302);
+});
+
+// /auth/* には requireUser が掛からないので、ここで Bearer を照合する
+app.delete("/cli-token", async (c) => {
+  const token = readBearerToken(c.req.header("authorization"));
+  if (!token) return c.json({ error: "Unauthorized" }, 401);
+  const user = await findCliTokenUser(token);
+  if (!user) return c.json({ error: "Unauthorized" }, 401);
+  await revokeCliToken(token);
+  logger.info({ event: "auth.cli_token_revoked", email: user.email });
+  return c.body(null, 204);
 });
 
 export default app;
