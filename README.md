@@ -30,6 +30,15 @@ URLはCloud Run / AWS Lambda上のAPIを経由して配信されます。APIが�
 > 無期限でアップロードしたファイルは期限切れによる解消が起きないため、
 > 必要なら手動で削除するか、アップロードし直してください。
 
+> **アップグレード時の注意（認証の導入）:**
+>
+> - 必須の4変数（`GOOGLE_OAUTH_CLIENT_ID`・`GOOGLE_OAUTH_CLIENT_SECRET`・`SESSION_SECRET`・`ALLOWED_EMAIL_DOMAINS`）が
+>   設定され、OAuthクライアントが作成されるまで、APIは起動しません。手順は [セルフホスティング](#セルフホスティング) の手順4・5を参照してください。
+> - 既存の共有リンクを開くにも、許可ドメインのGoogleログインが必要になります。リンクを受け取る相手が許可ドメインのアカウントを持っているか確認してください。
+> - 古いCLIは認証付きのリクエストを送れず、素の `401` が返ります。CLIを更新して `tim login` を実行してください。
+> - 以前 `Cache-Control: public` で配信されたレスポンスは、`max-age` が切れるまで共有キャッシュ（CDNなど）から配信され続けることがあります。
+> - ロードバランサやCloud Armorの背後で動かす場合は `PUBLIC_BASE_URL` を設定してください（リダイレクトURIの基準になります）。
+
 ## 必要なもの
 
 - デプロイ済みの `@timothy/api`（[セルフホスティング](#セルフホスティング) を参照）
@@ -240,7 +249,10 @@ docker build -f packages/api/Dockerfile -t ${IMAGE} .
 docker push ${IMAGE}
 ```
 
-Cloud Runにデプロイします（手順3で作成したサービスアカウントで実行、ADC方式）:
+Cloud Runにデプロイします（手順3で作成したサービスアカウントで実行、ADC方式）。
+APIは次の4つが揃っていないと起動時にエラーで終了するため、デプロイ時に一緒に指定します
+（各変数の意味は手順5の表を参照）。`GOOGLE_OAUTH_CLIENT_SECRET` と `SESSION_SECRET` は
+事前にSecret Managerへ登録しておいてください（`SESSION_SECRET` は `openssl rand -base64 32` などで生成した値）。
 
 ```bash
 gcloud run deploy timothy-api \
@@ -249,10 +261,17 @@ gcloud run deploy timothy-api \
   --min-instances 0 \
   --max-instances 2 \
   --service-account ${SA} \
-  --set-env-vars FIREBASE_PROJECT_ID=${PROJECT} \
-  --set-env-vars FIREBASE_STORAGE_BUCKET=${PROJECT}-timothy \
+  --set-env-vars "^@^FIREBASE_PROJECT_ID=${PROJECT}@FIREBASE_STORAGE_BUCKET=${BUCKET}@ALLOWED_EMAIL_DOMAINS=a.com,b.com@GOOGLE_OAUTH_CLIENT_ID=<クライアントID>" \
+  --set-secrets GOOGLE_OAUTH_CLIENT_SECRET=google-oauth-client-secret:latest,SESSION_SECRET=session-secret:latest \
   --allow-unauthenticated
 ```
+
+`ALLOWED_EMAIL_DOMAINS` はカンマ区切りで複数指定できます。gcloudの `--set-env-vars` もカンマを
+区切りに使うため、`^@^` で区切り文字を `@` に変えています（値に `@` を含めない限り、この形で書けます）。
+
+OAuthクライアントのIDとシークレットは手順5で作成します。リダイレクトURI（`<公開URL>/auth/callback`）は
+サービスURLが決まってから登録すれば足り、ログインするときまでに間に合えばデプロイ自体は進められます。
+クライアントを先に作る場合は、仮のリダイレクトURIで作成しておき、デプロイ後に差し替えてください。
 
 デプロイ後に表示されるサービスURLをメモしてください。
 
@@ -264,7 +283,7 @@ APIはGoogleアカウントでのログインを必須とします。Google Clou
 **承認済みのリダイレクトURI** に `<公開URL>/auth/callback` を登録してください
 （例: `https://timothy-api-xxxx-an.a.run.app/auth/callback`）。
 
-APIには次の環境変数を設定します。必須の変数が欠けていると、APIは起動時にエラーになります。
+APIには次の環境変数を設定します（手順4のデプロイで指定済みのものを含みます）。必須の変数が欠けていると、APIは起動時にエラーになります。
 
 | 環境変数 | 必須 | 意味 |
 |---|---|---|
@@ -274,11 +293,12 @@ APIには次の環境変数を設定します。必須の変数が欠けてい�
 | `ALLOWED_EMAIL_DOMAINS` | 必須 | ログインを許可するメールアドレスのドメイン（カンマ区切り。例: `example.com`） |
 | `PUBLIC_BASE_URL` | 任意 | APIの公開URL（例: `https://timothy-api-xxxx-an.a.run.app`）。プロキシ越しでHostが揺れる場合に、コールバックURLの基準として固定する |
 
+後から値を変える場合は `gcloud run services update` を使います（カンマを含む値は手順4と同じく `^@^` 形式で指定します）:
+
 ```bash
 gcloud run services update timothy-api \
   --region ${REGION} \
-  --set-env-vars ALLOWED_EMAIL_DOMAINS=example.com,GOOGLE_OAUTH_CLIENT_ID=... \
-  --set-secrets GOOGLE_OAUTH_CLIENT_SECRET=...,SESSION_SECRET=...
+  --update-env-vars "^@^ALLOWED_EMAIL_DOMAINS=a.com,b.com"
 ```
 
 ### 6. （オプション）IPアドレス制限の設定
@@ -302,7 +322,7 @@ CLIからのアクセスも、共有URLを開く相手も、このIPアドレス
 
 | 環境変数 | 既定値 | 意味 |
 |---|---|---|
-| `ALLOWED_IPS` | 未設定（全リクエスト許可） | `/`、`/upload`、`/files`、`/files/<id>`、`/s/*` へのアクセスを許可するIP・CIDRのカンマ区切り |
+| `ALLOWED_IPS` | 未設定（IP 制限なし。ログインは必須） | `/`、`/upload`、`/files`、`/files/<id>`、`/s/*` へのアクセスを許可するIP・CIDRのカンマ区切り |
 | `XFF_TRUSTED_HOPS` | `1` | サービスの前段で `X-Forwarded-For` に追記するプロキシの段数。末尾からこの数だけ遡ったエントリをクライアントIPとして採用する |
 
 既定値の `1` は、`*.run.app` の素のCloud Runサービス（およびLambda Function URL）のように
@@ -325,6 +345,13 @@ tim setup
 
 tim login
 ```
+
+### 運用
+
+- 画面の「ログアウト」はブラウザのCookieを消すだけです。Cookieを盗まれた場合、セッションは最長7日間有効なままです。
+- CLIのトークンは90日間有効です。`tim logout` で失効するほか、Firestoreの `cliTokens` コレクションのドキュメントを削除しても失効します。
+- `ALLOWED_EMAIL_DOMAINS` からドメインを外すと、そのドメインの既存セッションとCLIトークンはすぐに使えなくなります（リクエストごとにドメインを再確認します）。
+- `SESSION_SECRET` を変更すると、全員のセッションが無効になり再ログインが必要になります。
 
 ### バケットのCORS設定
 
@@ -353,6 +380,8 @@ gcloud storage buckets update gs://YOUR_BUCKET --cors-file=cors.json
 ## AWSでのセルフホスティング（Lambda）
 
 APIはAWS Lambda上でも動作します。Firebaseバックエンド（Firestore + Cloud Storage）はそのまま使用し、コンピュート層のみをAWSに置き換えます。Cloud Run版との**コードの差異はありません**。
+
+Lambdaでも認証の設定は必須です。環境変数（手順5の表）をLambdaの環境変数に設定し、OAuthクライアントの承認済みリダイレクトURIに `<公開URL>/auth/callback`（Function URLなど）を登録してください。ログイン時にだけ必要なので、URLが決まってから登録できます。
 
 ## ライセンス
 
