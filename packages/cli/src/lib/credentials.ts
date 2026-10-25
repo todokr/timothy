@@ -1,4 +1,5 @@
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -22,13 +23,23 @@ export async function readCredentials(): Promise<Credentials | null> {
 
 export async function writeCredentials(credentials: Credentials): Promise<void> {
   const path = credentialsPath();
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, JSON.stringify({ token: credentials.token }, null, 2), {
-    encoding: "utf-8",
-    mode: 0o600,
-  });
-  // mode は新規作成時にしか効かない。既に緩い権限で存在するファイルも締め直す
-  await chmod(path, 0o600);
+  // 既存の config.json と同じディレクトリを共有するので、新規作成のときだけ 0700 にする
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  // 既存ファイルが緩い権限でも、そこへ新しいトークンを書かない。
+  // 0600 で作った一時ファイルに書いてから rename で置き換えれば、トークンが
+  // 他のユーザーに読める状態で存在する瞬間がない（置き換え後は inode ごと新しい）。
+  const tmp = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+  try {
+    await writeFile(tmp, JSON.stringify({ token: credentials.token }, null, 2), {
+      encoding: "utf-8",
+      mode: 0o600,
+      flag: "wx",
+    });
+    await rename(tmp, path);
+  } catch (err) {
+    await rm(tmp, { force: true });
+    throw err;
+  }
 }
 
 export async function deleteCredentials(): Promise<void> {

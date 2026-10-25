@@ -1,4 +1,4 @@
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -29,12 +29,30 @@ describe("credentials", () => {
     expect(await readCredentials()).toEqual({ token: "abc" });
   });
 
-  it("tightens the mode when overwriting a looser file", async () => {
+  it("replaces a looser existing file with a 0600 one", async () => {
+    const dir = join(home, ".config", "timothy");
+    const path = join(dir, "credentials.json");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path, JSON.stringify({ token: "old" }));
+    await chmod(path, 0o644);
+    expect((await stat(path)).mode & 0o777).toBe(0o644);
+
+    await writeCredentials({ token: "new" });
+
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect(await readCredentials()).toEqual({ token: "new" });
+    // 一時ファイルが残らない
+    expect(await readdir(dir)).toEqual(["credentials.json"]);
+  });
+
+  it("creates the config directory with mode 0700 but leaves an existing one alone", async () => {
     await writeCredentials({ token: "abc" });
+    const dir = join(home, ".config", "timothy");
+    expect((await stat(dir)).mode & 0o777).toBe(0o700);
+
+    await chmod(dir, 0o755);
     await writeCredentials({ token: "def" });
-    const s = await stat(join(home, ".config", "timothy", "credentials.json"));
-    expect(s.mode & 0o777).toBe(0o600);
-    expect(await readCredentials()).toEqual({ token: "def" });
+    expect((await stat(dir)).mode & 0o777).toBe(0o755);
   });
 
   it("deletes credentials and tolerates a missing file", async () => {
@@ -46,7 +64,6 @@ describe("credentials", () => {
 
   it("returns null for a malformed file", async () => {
     await writeCredentials({ token: "abc" });
-    const { writeFile } = await import("node:fs/promises");
     await writeFile(join(home, ".config", "timothy", "credentials.json"), "{not json");
     expect(await readCredentials()).toBeNull();
   });
