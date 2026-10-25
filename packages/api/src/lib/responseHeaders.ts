@@ -1,5 +1,5 @@
 /**
- * `/s/:id` のレスポンスヘッダを組み立てる。
+ * `/s/:id/v/:n` のレスポンスヘッダを組み立てる。
  *
  * 既定は「実行には寛容、送信には厳格」。コンテンツごとの設定はこの既定を
  * **緩める方向にのみ**働き、床（sandbox の付与・Content-Type・
@@ -234,15 +234,22 @@ function sourceDirective(key: SourceKey, added: string[] | undefined): string {
  * window.open() は CSP では塞げない（navigate-to は仕様から削除済み）ため、
  * allow-popups がある限り送信経路として残る。
  */
-export function buildCsp(settings?: ResponseHeaderSettings): string {
+/**
+ * 実際に配信する sandbox トークン。CSP の sandbox と iframe の sandbox 属性が
+ * 同じ集合になるよう、どちらもここから取る。
+ */
+export function effectiveSandboxTokens(settings?: ResponseHeaderSettings): readonly string[] {
   // 保存済みの値も語彙で濾す。parseSettings は書き込み時にしか働かないので、
   // 読み取り側でも通さないと「一度保存された危険な設定が配信され続ける」形になる。
   const stored = settings?.sandbox?.filter((token) =>
     (availableSandboxTokens() as readonly string[]).includes(token)
   );
-  const tokens = stored?.length ? stored : DEFAULT_SANDBOX_TOKENS;
+  return stored?.length ? stored : DEFAULT_SANDBOX_TOKENS;
+}
+
+export function buildCsp(settings?: ResponseHeaderSettings): string {
   return [
-    `sandbox ${tokens.join(" ")}`,
+    `sandbox ${effectiveSandboxTokens(settings).join(" ")}`,
     "default-src 'none'",
     sourceDirective("script", settings?.allowedSources?.script),
     sourceDirective("style", settings?.allowedSources?.style),
@@ -302,12 +309,13 @@ export function buildHeaders(
   return {
     csp: buildCsp(settings),
     cacheControl: cacheControlValue(settings?.cacheControl, expiresAt, nowMs),
-    // 埋め込み拒否はこのヘッダだけで行う。CSP の frame-ancestors は
-    // default-src にフォールバックしない数少ないディレクティブなので、
-    // default-src 'none' があっても他サイトからの iframe は防げない。
-    // frame-ancestors を併記すると CSP3 §6.4.2.2 によりこちらが無視されるため、
-    // 送るのは片方だけにする。設定項目にはしない（全拒否以外の要求が無い）。
-    xFrameOptions: "DENY",
+    // 外枠ページ（同一オリジン）の iframe からだけ表示できるようにする。
+    // 他サイトからの埋め込みはこれで拒否する。
+    // CSP の frame-ancestors は default-src にフォールバックしない数少ない
+    // ディレクティブなので、default-src 'none' があっても他サイトからの
+    // iframe は防げない。ただし frame-ancestors を併記すると CSP3 §6.4.2.2 により
+    // こちらが無視されるため、送るのは片方だけにする。設定項目にはしない。
+    xFrameOptions: "SAMEORIGIN",
     referrerPolicy: settings?.referrerPolicy,
   };
 }

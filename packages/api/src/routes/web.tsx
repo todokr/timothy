@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { getUser, type AppEnv } from "../lib/auth.js";
-import { canManage } from "../lib/ownership.js";
+import { canManage, canRevise } from "../lib/ownership.js";
 import type { SessionUser } from "../lib/session.js";
 import { Style } from "hono/css";
 import { raw } from "hono/html";
@@ -32,7 +32,9 @@ import {
   tableWrapClass,
   shareCellClass,
   titleCellClass,
+  titleLineClass,
   titleTextClass,
+  versionBadgeClass,
   descriptionTextClass,
   dateCellClass,
   formClass,
@@ -79,7 +81,7 @@ export function isExpired(iso: string | null, nowMs: number): boolean {
 // ブラウザが互換モード (quirks mode) で描画するのを防ぐ。
 const DOCTYPE = raw("<!DOCTYPE html>");
 
-export function Layout(props: { children: unknown; script?: string }) {
+export function Layout(props: { children: unknown; script?: string; title?: string }) {
   return (
     <>
       {DOCTYPE}
@@ -87,7 +89,7 @@ export function Layout(props: { children: unknown; script?: string }) {
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>Tim</title>
+          <title>{props.title ?? "Tim"}</title>
           <Style>{globalStyles}</Style>
         </head>
         <body>
@@ -132,7 +134,10 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string; user: Sess
                 行の高さが揺れる。
               */}
               <td class={titleCellClass}>
-                <span class={titleTextClass}>{file.title}</span>
+                <span class={titleLineClass}>
+                  <span class={titleTextClass}>{file.title}</span>
+                  <span class={versionBadgeClass}>{`v${file.latestVersion}`}</span>
+                </span>
                 {file.description ? (
                   <span class={descriptionTextClass} title={file.description}>
                     {file.description}
@@ -177,6 +182,23 @@ function FileTable(props: { files: FileEntry[]; emptyMessage: string; user: Sess
                       <a class={ghostButtonClass} href={`/files/${file.id}/headers/edit`}>
                         ヘッダ設定
                       </a>
+                      {/*
+                        修正は canManage より狭い条件（所有者のいないファイルには出さない）。
+                        ファイル選択は隠した input に任せ、ボタンはそれを開くだけにする。
+                      */}
+                      {canRevise(props.user, { ownerEmail: file.owner?.email }) ? (
+                        <>
+                          <button type="button" class={ghostButtonClass} data-revise-id={file.id}>
+                            修正版を上げる
+                          </button>
+                          <input
+                            type="file"
+                            accept=".html,.htm"
+                            hidden
+                            data-revise-input={file.id}
+                          />
+                        </>
+                      ) : null}
                       <button type="button" class={dangerButtonClass} data-delete-id={file.id}>
                         削除
                       </button>

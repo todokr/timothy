@@ -19,6 +19,10 @@ pnpm dev
 > ヘッダ設定は所有者に限る。下の認証用の必須環境変数が欠けていると API は起動時にエラーになる。
 > `ALLOWED_IPS` は認証とは別の IP 制限で、共有 URL にも同じように効くため、
 > 管理画面だけを保護することはできない。詳細はリポジトリルートの README を参照。
+>
+> 共有 URL は 2 つに分かれる。`/s/<id>`（`?v=<版>` で版を指定）は版セレクタ付きの外枠ページ、
+> `/s/<id>/v/<n>` は HTML 本体で、外枠の iframe が読み込む。同じ URL に修正版を上げる API は
+> `POST /files/:id/versions`（アップロード用 URL の発行）と `POST /files/:id/versions/:uploadId/commit`（確定）。
 
 ### 環境変数（ローカル）
 

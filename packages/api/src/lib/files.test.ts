@@ -76,6 +76,7 @@ describe("listFiles", () => {
         expiresAt: "2026-08-14T00:00:00.000Z",
         createdAt: "2026-08-07T00:00:00.000Z",
         owner: null,
+        latestVersion: 1,
       },
     ]);
   });
@@ -109,6 +110,18 @@ describe("listFiles", () => {
 
     expect(files[0].owner).toEqual({ email: "a@example.com", name: "Alice" });
     expect(files[1].owner).toBeNull();
+  });
+
+  it("includes the latest version, treating legacy files as v1", async () => {
+    const createdAt = { toDate: () => new Date("2026-08-07T00:00:00.000Z") };
+    mockSnapshot([
+      { id: "01REV", data: { title: "A", description: "", expiresAt: null, createdAt, latestVersion: 3 } },
+      { id: "01OLD", data: { title: "B", description: "", expiresAt: null, createdAt } },
+    ]);
+
+    const entries = await listFiles("http://localhost");
+
+    expect(entries.map((e) => e.latestVersion)).toEqual([3, 1]);
   });
 
   // 絞り込みはメモリ上。複合インデックスを増やさないため、Firestore には where を送らない。

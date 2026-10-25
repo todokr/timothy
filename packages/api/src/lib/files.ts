@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { db } from "./firebase.js";
+import { latestVersionOf } from "./versions.js";
 
 export const HTML_FILES_COLLECTION = "htmlFiles";
 
@@ -14,6 +15,8 @@ export type FileEntry = {
   createdAt: string;
   /** 所有者の記録を始める前にアップロードされたファイルは null。 */
   owner: { email: string; name: string } | null;
+  /** 最新の版番号。修正されていないファイルは 1。 */
+  latestVersion: number;
 };
 
 export function resolveBaseUrl(c: Context): string {
@@ -43,6 +46,7 @@ export async function listFiles(
       owner: data.ownerEmail
         ? { email: data.ownerEmail as string, name: (data.ownerName as string) ?? "" }
         : null,
+      latestVersion: latestVersionOf(data),
     };
   });
 

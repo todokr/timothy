@@ -36,7 +36,9 @@ export const listCommand = new Command("list")
     for (const f of files) {
       const created = f.createdAt.slice(0, 10);
       const expires = formatExpiry(f.expiresAt);
-      const title = f.title.length > titleW - 2 ? `${f.title.slice(0, titleW - 3)}…` : f.title;
+      // 版の番号を先頭に付ける。切り詰めは番号を含めた幅で行う。
+      const labeled = `v${f.latestVersion ?? 1} ${f.title}`;
+      const title = labeled.length > titleW - 2 ? `${labeled.slice(0, titleW - 3)}…` : labeled;
       const row = `${f.url.padEnd(urlW)}${title.padEnd(titleW)}${ownerOf(f).padEnd(ownerW)}${created.padEnd(dateW)}${expires}`;
       process.stdout.write(`${row}\n`);
     }

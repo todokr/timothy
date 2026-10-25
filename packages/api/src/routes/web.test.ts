@@ -27,6 +27,7 @@ function entry(overrides: Record<string, unknown> = {}) {
     expiresAt: "2099-01-01T00:00:00.000Z",
     createdAt: "2026-08-07T03:04:00.000Z",
     owner: null,
+    latestVersion: 1,
     ...overrides,
   };
 }
@@ -103,12 +104,13 @@ describe("GET /", () => {
   });
 
   // 空の要素が残ると margin の分だけ行の高さが揺れる。
+  // 説明の span だけが title 属性（全文のツールチップ）を持つ。版のバッジも span なので、span の有無では見分けられない。
   it("omits the description element when there is no description", async () => {
     vi.mocked(listFiles).mockResolvedValue([entry({ description: "" })]);
     const html = await (await app.request("/")).text();
 
     const titleCell = html.slice(html.indexOf("Monthly Report"));
-    expect(titleCell.slice(0, titleCell.indexOf("</td>"))).not.toContain("<span");
+    expect(titleCell.slice(0, titleCell.indexOf("</td>"))).not.toContain("title=");
   });
 
   it("formats timestamps in Asia/Tokyo", async () => {
@@ -485,6 +487,32 @@ describe("ownership in the file list", () => {
     const html = await (await app.request("/")).text();
 
     expect(html).toContain(">-</td>");
+    expect(html).toContain('data-delete-id="01LEGACY"');
+  });
+
+  it("shows the version number of each file", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "01REV", latestVersion: 3 }),
+      entry({ id: "01FIRST", latestVersion: 1 }),
+    ]);
+    const html = await (await app.request("/")).text();
+
+    expect(html).toContain(">v3<");
+    expect(html).toContain(">v1<");
+  });
+
+  it("offers a revision upload only on files the user owns", async () => {
+    vi.mocked(listFiles).mockResolvedValue([
+      entry({ id: "01MINE", owner: { email: TEST_USER.email, name: TEST_USER.name } }),
+      entry({ id: "01OTHER", owner: other }),
+      entry({ id: "01LEGACY", owner: null }),
+    ]);
+    const html = await (await app.request("/")).text();
+
+    expect(html).toContain('data-revise-id="01MINE"');
+    expect(html).not.toContain('data-revise-id="01OTHER"');
+    // 所有者のいないファイルは削除できても修正版は上げられない
+    expect(html).not.toContain('data-revise-id="01LEGACY"');
     expect(html).toContain('data-delete-id="01LEGACY"');
   });
 

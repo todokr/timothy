@@ -56,7 +56,12 @@ tim upload report.html --ttl never
 
 # Pipe from stdin
 llm generate report | tim upload --stdin --title "Generated Report"
+
+# Upload a revision to an existing share (file ID or share URL)
+tim upload report-v2.html --to <id|url>
 ```
+
+A revision keeps the same URL and shows up as a new version (`v2`, `v3`, ...). Only the person who first uploaded the file can upload revisions, and the title and expiry carry over from the original, so `--title` and `--ttl` cannot be combined with `--to`. Files with no recorded owner cannot be revised. `tim list` prefixes each title with its latest version (`v<N>`).
 
 ### List
 
@@ -69,8 +74,8 @@ tim list --mine
 
 ```
 URL                         TITLE             OWNER              CREATED       EXPIRES
-https://.../s/01JWXYZ...    Monthly Report    alice@example.com  2026-05-20    2026-05-27
-https://.../s/01JWABC...    Analysis          -                  2026-05-18    2026-05-25
+https://.../s/01JWXYZ...    v1 Monthly Report alice@example.com  2026-05-20    2026-05-27
+https://.../s/01JWABC...    v1 Analysis       -                  2026-05-18    2026-05-25
 ```
 
 Files with no recorded owner (uploaded before login existed) show `-`.

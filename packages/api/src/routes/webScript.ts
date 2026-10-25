@@ -171,6 +171,77 @@ export const CLIENT_SCRIPT = `
     });
   });
 
+  // 修正版のアップロード。新規と違い、PUT が失敗しても確定を呼ばなければ版は増えず、
+  // 片付けは要らない（一覧の再読み込みも不要）。
+  async function postJson(url) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+  }
+
+  async function uploadRevision(id, file, rowError) {
+    var base = "/files/" + id + "/versions";
+    var res = await postJson(base);
+    if (!res.ok) {
+      var body = await res.json().catch(function () { return {}; });
+      rowError.textContent = body.error || "修正版の準備に失敗しました (HTTP " + res.status + ")";
+      return;
+    }
+    var issued = await res.json();
+
+    var put = await fetch(issued.uploadUrl, {
+      method: "PUT",
+      headers: issued.uploadHeaders,
+      body: await file.text(),
+    });
+    if (!put.ok) {
+      rowError.textContent = "アップロードに失敗しました (HTTP " + put.status + ")";
+      return;
+    }
+
+    var commit = await postJson(base + "/" + issued.uploadId + "/commit");
+    if (!commit.ok) {
+      var commitBody = await commit.json().catch(function () { return {}; });
+      rowError.textContent = commitBody.error || "修正版の確定に失敗しました (HTTP " + commit.status + ")";
+      return;
+    }
+    location.reload();
+  }
+
+  document.querySelectorAll("[data-revise-id]").forEach(function (button) {
+    var id = button.dataset.reviseId;
+    var input = button.parentElement.querySelector('[data-revise-input="' + id + '"]');
+    var rowError = button.closest("tr").querySelector("[data-row-error]");
+
+    button.addEventListener("click", function () { input.click(); });
+
+    input.addEventListener("change", async function () {
+      var file = input.files[0];
+      // 同じファイルを選び直しても change が発火するよう、先に空にする
+      input.value = "";
+      if (!file) return;
+      rowError.textContent = "";
+      if (!isHtmlFile(file)) {
+        rowError.textContent = "HTML ファイル (.html / .htm) を選択してください";
+        return;
+      }
+
+      var original = button.textContent;
+      button.disabled = true;
+      button.textContent = "アップロード中...";
+      try {
+        await uploadRevision(id, file, rowError);
+      } catch (err) {
+        rowError.textContent = "アップロードに失敗しました: " + err.message;
+      } finally {
+        button.disabled = false;
+        button.textContent = original;
+      }
+    });
+  });
+
   document.querySelectorAll("[data-copy-url]").forEach(function (button) {
     button.addEventListener("click", async function () {
       try {
