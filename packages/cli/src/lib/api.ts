@@ -39,6 +39,49 @@ export type FileEntry = {
 
 export type RevisionResponse = { id: string; version: number; url: string };
 
+export type Person = { email: string; name: string };
+
+// API の lib/anchors.ts と同じ形（パッケージ間でコードは共有しないので写している）。
+export type TextAnchor = { type: "text"; quote: string; prefix: string; suffix: string };
+export type ElementAnchor = { type: "element"; tag: string; text: string; path: number[] };
+export type Anchor = TextAnchor | ElementAnchor;
+
+export type FileInfo = {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  /** 所有者なし（認証導入前のファイル）は null。 */
+  owner: Person | null;
+  /** ISO 8601。null は無期限。 */
+  expiresAt: string | null;
+  latestVersion: number;
+  versions: { version: number; createdAt: string; uploadedBy: Person | null }[];
+};
+
+export type FileContent = { id: string; version: number; html: string };
+
+export type CommentReply = {
+  id: string;
+  body: string;
+  author: Person;
+  viaAgent: boolean;
+  createdAt: string;
+};
+
+export type Comment = {
+  id: string;
+  version: number;
+  anchor: Anchor;
+  body: string;
+  author: Person;
+  createdAt: string;
+  resolved: boolean;
+  resolvedBy: Person | null;
+  resolvedAt: string | null;
+  replies: CommentReply[];
+};
+
 const LOGIN_HINT = "Not logged in. Run `tim login`.";
 
 /** 資格情報が無ければ API を呼ぶ前に案内する。無駄な往復を避け、401 と同じ文言にそろえる。 */
@@ -91,6 +134,58 @@ async function assertRevisionOk(res: Response): Promise<void> {
   await assertOk(res);
 }
 
+/** 特定のファイルを対象にする API 用。404・410 は呼び出し側が渡した id で案内し、403 は応答の error を見せる。 */
+async function assertFileOk(res: Response, id: string): Promise<void> {
+  if (res.status === 404) throw new Error(`Not found: ${id}`);
+  if (res.status === 410) throw new Error(`Expired: ${id}`);
+  await assertRevisionOk(res);
+}
+
+export async function apiGetFile(id: string, config: Config): Promise<FileInfo> {
+  const res = await fetch(`${config.apiEndpoint}/files/${id}`, { headers: await authHeaders() });
+  await assertFileOk(res, id);
+  return (await res.json()) as FileInfo;
+}
+
+/** version を省くと最新版。 */
+export async function apiGetContent(
+  id: string,
+  version: number | undefined,
+  config: Config
+): Promise<FileContent> {
+  const query = version === undefined ? "" : `?v=${version}`;
+  const res = await fetch(`${config.apiEndpoint}/files/${id}/content${query}`, {
+    headers: await authHeaders(),
+  });
+  await assertFileOk(res, id);
+  return (await res.json()) as FileContent;
+}
+
+export async function apiListComments(id: string, config: Config): Promise<Comment[]> {
+  const res = await fetch(`${config.apiEndpoint}/files/${id}/comments`, {
+    headers: await authHeaders(),
+  });
+  await assertFileOk(res, id);
+  const { comments } = (await res.json()) as { comments: Comment[] };
+  return comments;
+}
+
+export async function apiReply(
+  id: string,
+  commentId: string,
+  body: string,
+  config: Config
+): Promise<Comment> {
+  const res = await fetch(`${config.apiEndpoint}/files/${id}/comments/${commentId}/replies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+    body: JSON.stringify({ body }),
+  });
+  await assertFileOk(res, id);
+  const { comment } = (await res.json()) as { comment: Comment };
+  return comment;
+}
+
 export async function apiUploadRevision(
   fileId: string,
   html: string,
@@ -117,11 +212,11 @@ export async function apiUploadRevision(
     throw new Error(`Storage upload failed ${putRes.status}: ${body}`);
   }
 
-  const commitRes = await fetch(`${base}/${issued.uploadId}/commit`, {
-    method: "POST",
-    headers,
-    body: "{}",
-  });
+  const commit = () =>
+    fetch(`${base}/${issued.uploadId}/commit`, { method: "POST", headers, body: "{}" });
+  let commitRes = await commit();
+  // 確定は同じ uploadId なら繰り返しても安全なので、サーバーの一時的な失敗に限り 1 回だけやり直す。
+  if (commitRes.status >= 500) commitRes = await commit();
   await assertRevisionOk(commitRes);
   return (await commitRes.json()) as RevisionResponse;
 }
