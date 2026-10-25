@@ -3,21 +3,19 @@ import { db } from "../lib/firebase.js";
 import { effectiveSandboxTokens } from "../lib/responseHeaders.js";
 import { latestVersionOf, listVersions, parseVersionParam } from "../lib/versions.js";
 import { Layout, formatJst } from "./web.js";
+import { VIEWER_SCRIPT } from "./viewerScript.js";
 import {
+  commentPanelClass,
+  pickToggleClass,
+  viewerBodyClass,
   viewerClass,
   viewerFrameClass,
   viewerHeaderClass,
   viewerNoticeClass,
+  viewerToastClass,
 } from "./webStyles.js";
 
 const HTML_FILES_COLLECTION = "htmlFiles";
-
-// 版を選んだら ?v=<N> へ移る。最新版を選んだときも ?v=<latest> にする。
-const VIEWER_SCRIPT = `
-document.getElementById("version-select").addEventListener("change", function (e) {
-  location.href = "?v=" + encodeURIComponent(e.target.value);
-});
-`;
 
 const app = new Hono();
 
@@ -40,7 +38,10 @@ app.get("/:id", async (c) => {
   const versions = await listVersions(id, data);
   const title: string = data.title ?? id;
   // 本体の CSP sandbox と同じトークンを属性にも付ける（二重の防御）。同じ集合なので打ち消し合わない。
-  const sandbox = effectiveSandboxTokens(data.responseHeaders).join(" ");
+  const sandboxTokens = effectiveSandboxTokens(data.responseHeaders);
+  const sandbox = sandboxTokens.join(" ");
+  // スクリプトが動かないと本体の中のブリッジも動かず、本文を選んでコメントできない。
+  const scriptsAllowed = sandboxTokens.includes("allow-scripts");
 
   // 確認画面と同じく、別サイトの iframe に入れられないようにする。
   c.header("X-Frame-Options", "DENY");
@@ -69,14 +70,64 @@ app.get("/:id", async (c) => {
               最新版ではありません <a href={`/s/${id}?v=${latest}`}>最新版（v{latest}）を開く</a>
             </span>
           ) : null}
+          <button
+            id="pick-toggle"
+            type="button"
+            class={pickToggleClass}
+            title="⌥+C / Alt+C"
+            aria-pressed="false"
+            disabled={!scriptsAllowed}
+          >
+            ◎ 要素を選んでコメント
+          </button>
         </header>
-        <iframe
-          id="viewer-frame"
-          class={viewerFrameClass}
-          src={`/s/${id}/v/${shown}`}
-          title={title}
-          sandbox={sandbox}
-        ></iframe>
+        <div class={viewerBodyClass}>
+          <iframe
+            id="viewer-frame"
+            class={viewerFrameClass}
+            src={`/s/${id}/v/${shown}`}
+            title={title}
+            sandbox={sandbox}
+          ></iframe>
+          <aside
+            id="comment-panel"
+            class={commentPanelClass}
+            data-file-id={id}
+            data-shown-version={String(shown)}
+            data-latest-version={String(latest)}
+            data-scripts-allowed={scriptsAllowed ? "true" : "false"}
+          >
+            <div id="composer" class="composer" hidden>
+              <div id="composer-anchor" class="anchor"></div>
+              <textarea id="composer-text" placeholder="コメントを書く…" aria-label="コメント"></textarea>
+              <div id="composer-error" class="error" hidden></div>
+              <div class="row">
+                <button id="composer-submit" type="button" class="primary">
+                  コメント
+                </button>
+                <button id="composer-cancel" type="button">
+                  キャンセル
+                </button>
+              </div>
+              <div class="hint">⌘+Enter / Ctrl+Enter で送信</div>
+            </div>
+            {scriptsAllowed ? (
+              <p id="idle-hint" class="hint">
+                文字を選択するか、「要素を選んでコメント」で図などを選ぶと、その箇所にコメントできます
+              </p>
+            ) : (
+              <p class="hint">この HTML はスクリプトを許可していないため、本文を選んでコメントすることはできません</p>
+            )}
+            <div class="row spread">
+              <span id="comment-count" class="hint"></span>
+              <label>
+                <input id="show-resolved" type="checkbox" /> 解決済みも表示
+              </label>
+            </div>
+            <div id="comment-list" class="threads"></div>
+          </aside>
+        </div>
+        <div id="toast" class={viewerToastClass} role="status" hidden></div>
       </div>
     </Layout>,
   );

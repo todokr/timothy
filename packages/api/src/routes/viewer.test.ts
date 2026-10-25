@@ -137,6 +137,47 @@ describe("GET /s/:id", () => {
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 
+  it("renders the comment panel with the file id and versions", async () => {
+    const html = await (await app.request("/01ABC?v=2")).text();
+    expect(html).toMatch(/<aside[^>]*id="comment-panel"[^>]*data-file-id="01ABC"/);
+    expect(html).toContain('data-shown-version="2"');
+    expect(html).toContain('data-latest-version="3"');
+    expect(html).toContain('data-scripts-allowed="true"');
+    expect(html).toContain("◎ 要素を選んでコメント");
+    expect(html).toMatch(/<button[^>]*id="pick-toggle"[^>]*title="⌥\+C \/ Alt\+C"/);
+    expect(html).not.toMatch(/<button[^>]*id="pick-toggle"[^>]*disabled/);
+    expect(html).toContain("コメントを書く…");
+    expect(html).toContain("⌘+Enter / Ctrl+Enter で送信");
+    expect(html).toContain("文字を選択するか、「要素を選んでコメント」で図などを選ぶと、その箇所にコメントできます");
+    expect(html).toContain("解決済みも表示");
+    expect(html).toMatch(/<input[^>]*id="show-resolved"/);
+    expect(html).not.toMatch(/<input[^>]*id="show-resolved"[^>]*checked/);
+  });
+
+  it("disables element picking when the owner removed allow-scripts", async () => {
+    mockParent(
+      {
+        title: "設計書",
+        storagePath: "p",
+        latestVersion: 3,
+        expiresAt: null,
+        responseHeaders: { sandbox: ["allow-popups"] },
+      },
+      threeVersions,
+    );
+    const html = await (await app.request("/01ABC")).text();
+    expect(html).toContain('data-scripts-allowed="false"');
+    expect(html).toMatch(/<button[^>]*id="pick-toggle"[^>]*disabled/);
+    expect(html).toContain("この HTML はスクリプトを許可していないため、本文を選んでコメントすることはできません");
+    expect(html).not.toContain("その箇所にコメントできます");
+  });
+
+  it("embeds the viewer script", async () => {
+    const html = await (await app.request("/01ABC")).text();
+    expect(html).toContain("tim:set-anchors");
+    expect(html).toContain('getElementById("version-select")');
+  });
+
   it("escapes the title", async () => {
     mockParent({ title: "<script>x</script>", storagePath: "p", expiresAt: null });
     const html = await (await app.request("/01ABC")).text();
