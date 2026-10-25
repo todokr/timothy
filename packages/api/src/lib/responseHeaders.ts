@@ -1,5 +1,5 @@
 /**
- * `/s/:id` のレスポンスヘッダを組み立てる。
+ * `/s/:id/v/:n` のレスポンスヘッダを組み立てる。
  *
  * 既定は「実行には寛容、送信には厳格」。コンテンツごとの設定はこの既定を
  * **緩める方向にのみ**働き、床（sandbox の付与・Content-Type・
@@ -302,12 +302,13 @@ export function buildHeaders(
   return {
     csp: buildCsp(settings),
     cacheControl: cacheControlValue(settings?.cacheControl, expiresAt, nowMs),
-    // 埋め込み拒否はこのヘッダだけで行う。CSP の frame-ancestors は
-    // default-src にフォールバックしない数少ないディレクティブなので、
-    // default-src 'none' があっても他サイトからの iframe は防げない。
-    // frame-ancestors を併記すると CSP3 §6.4.2.2 によりこちらが無視されるため、
-    // 送るのは片方だけにする。設定項目にはしない（全拒否以外の要求が無い）。
-    xFrameOptions: "DENY",
+    // 外枠ページ（同一オリジン）の iframe からだけ表示できるようにする。
+    // 他サイトからの埋め込みはこれで拒否する。
+    // CSP の frame-ancestors は default-src にフォールバックしない数少ない
+    // ディレクティブなので、default-src 'none' があっても他サイトからの
+    // iframe は防げない。ただし frame-ancestors を併記すると CSP3 §6.4.2.2 により
+    // こちらが無視されるため、送るのは片方だけにする。設定項目にはしない。
+    xFrameOptions: "SAMEORIGIN",
     referrerPolicy: settings?.referrerPolicy,
   };
 }

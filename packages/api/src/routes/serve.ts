@@ -2,12 +2,14 @@ import { Hono } from "hono";
 import { db } from "../lib/firebase.js";
 import { getFileContent } from "../lib/storage.js";
 import { buildHeaders } from "../lib/responseHeaders.js";
+import { getVersion, latestVersionOf, parseVersionParam } from "../lib/versions.js";
 
 const HTML_FILES_COLLECTION = "htmlFiles";
 
 const app = new Hono();
 
-app.get("/:id", async (c) => {
+// 版を指す URL は版ごとに不変。「最新」を指す別名は作らない。
+app.get("/:id/v/:n", async (c) => {
   const id = c.req.param("id");
 
   const doc = await db.collection(HTML_FILES_COLLECTION).doc(id).get();
@@ -18,7 +20,13 @@ app.get("/:id", async (c) => {
   const expiresAt: Date | null = data.expiresAt ? data.expiresAt.toDate() : null;
   if (expiresAt !== null && expiresAt < new Date()) return c.json({ error: "Gone" }, 410);
 
-  const html = await getFileContent(data.storagePath);
+  // 期限切れの判定が先。版の検証はその後。
+  const n = parseVersionParam(c.req.param("n"), latestVersionOf(data));
+  if (n === null) return c.json({ error: "Not Found" }, 404);
+  const version = await getVersion(id, data, n);
+  if (!version) return c.json({ error: "Not Found" }, 404);
+
+  const html = await getFileContent(version.storagePath);
 
   // ヘッダ名はここで固定し、保存された設定から名前が渡る経路を作らない。
   // c.header() は後勝ちで上書きでき、値 undefined では削除もできるため、

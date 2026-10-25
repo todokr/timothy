@@ -161,7 +161,7 @@ describe("buildHeaders", () => {
     expect(headers).toEqual({
       csp: BASELINE,
       cacheControl: undefined,
-      xFrameOptions: "DENY",
+      xFrameOptions: "SAMEORIGIN",
       referrerPolicy: undefined,
     });
   });
