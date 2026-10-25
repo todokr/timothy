@@ -23,6 +23,8 @@ pnpm dev
 > 共有 URL は 2 つに分かれる。`/s/<id>`（`?v=<版>` で版を指定）は版セレクタ付きの外枠ページ、
 > `/s/<id>/v/<n>` は HTML 本体で、外枠の iframe が読み込む。同じ URL に修正版を上げる API は
 > `POST /files/:id/versions`（アップロード用 URL の発行）と `POST /files/:id/versions/:uploadId/commit`（確定）。
+> 外枠の iframe は `sandbox` 付き（`allow-same-origin` なし）で、本体の中のブリッジ（配信時に差し込む
+> スクリプト）と親画面は `postMessage` だけでやり取りする。コメントの保存は親画面だけが行う。
 
 ### 環境変数（ローカル）
 
@@ -54,6 +56,27 @@ OAuth クライアントは開発用のものを作り、承認済みリダイ�
 > curl -X POST -H "Content-Type: text/html; charset=utf-8" --data-binary @page.html \
 >   "http://localhost:9199/upload/storage/v1/b/demo-test.example.com/o?uploadType=media&name=timothy-files%2F<id>.html"
 > ```
+
+---
+
+## コメント API
+
+共有ページのコメントの API。すべて `/files/:id/comments` 配下で、ログイン済み（セッションまたは CLI トークン）なら
+所有者でなくても使える。親ファイルが無ければ `404`、期限切れなら `410`。JSON を送るエンドポイントは
+`Content-Type: application/json` が必須（違えば `415`）。
+
+| メソッド・パス | 内容 |
+|---|---|
+| `GET /files/:id/comments` | コメントを作成日時の昇順で返す（`{ comments: [...] }`、解決済みを含む） |
+| `POST /files/:id/comments` | コメントを作る。body は `{ version, anchor, body }`。`version` は 1 以上最新版以下の整数。`body` は前後の空白を除いて 1〜10000 文字。成功は `201` と `{ comment }` |
+| `POST /files/:id/comments/:commentId/replies` | 返信を付ける。body は `{ body }`。成功は `201` と更新後の `{ comment }`。コメントが無ければ `404` |
+| `POST /files/:id/comments/:commentId/resolve` | 解決・取り消し。body は `{ resolved: boolean }`。成功は `200` と `{ comment }` |
+
+body に余計なフィールドがある・形が不正なときは `400`。
+
+**CLI トークンの制限:** `Authorization: Bearer` で認証した CLI トークンからは、新規コメントと解決はできず
+`403`（`Comments can only be created from the browser` / `Comments can only be resolved from the browser`）になる。
+返信だけは許され、`viaAgent: true` の「agent 経由」の返信として記録される（画面では「（agent 経由）」と表示）。
 
 ---
 
