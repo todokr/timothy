@@ -104,7 +104,12 @@ tim upload report.html --ttl never
 
 # 標準入力から渡す
 llm generate report | tim upload --stdin --title "生成レポート"
+
+# 既存の共有に修正版を上げる（ファイル ID か共有 URL を指定）
+tim upload report-v2.html --to <id|url>
 ```
+
+修正版は同じ URL に新しい版（`v2`、`v3`…）として追加されます。上げられるのは最初にアップロードした本人だけで、タイトルと有効期限は元のまま引き継ぐため、`--to` に `--title`・`--ttl` は併用できません。所有者のいないファイルには修正版を上げられません。`tim list` は各タイトルの先頭に最新の版 `v<N>` を表示します。
 
 ### 一覧表示
 

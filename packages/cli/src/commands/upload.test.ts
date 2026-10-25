@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseTtlOption } from "./upload.js";
+import { parseFileRef, parseTtlOption } from "./upload.js";
 
 describe("parseTtlOption", () => {
   it("parses a positive integer as a day count", () => {
@@ -31,3 +31,16 @@ describe("parseTtlOption", () => {
   });
 });
 
+
+describe("parseFileRef", () => {
+  it("accepts a bare file ID", () =>
+    expect(parseFileRef("01M5S269ZPZAQ65A57RD9VR76G")).toBe("01M5S269ZPZAQ65A57RD9VR76G"));
+  it("extracts the ID from a share URL", () =>
+    expect(parseFileRef("https://tim.example.com/s/01M5S269ZPZAQ65A57RD9VR76G?v=2")).toBe(
+      "01M5S269ZPZAQ65A57RD9VR76G"
+    ));
+  it.each(["", "abc", "https://tim.example.com/files", "../01M5S269ZPZAQ65A57RD9VR76G"])(
+    "rejects %j",
+    (v) => expect(parseFileRef(v)).toBeNull()
+  );
+});

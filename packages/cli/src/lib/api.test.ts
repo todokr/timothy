@@ -4,7 +4,7 @@ vi.mock("./credentials.js", () => ({
   readCredentials: vi.fn(),
 }));
 
-import { apiDelete, apiList, apiLogoutToken, apiUpload } from "./api.js";
+import { apiDelete, apiList, apiLogoutToken, apiUpload, apiUploadRevision } from "./api.js";
 import { readCredentials } from "./credentials.js";
 
 const config = { apiEndpoint: "https://api.example.com" };
@@ -85,5 +85,60 @@ describe("api auth", () => {
     expect(url).toBe("https://api.example.com/auth/cli-token");
     expect(init.method).toBe("DELETE");
     expect(init.headers.Authorization).toBe("Bearer tok_123");
+  });
+});
+
+describe("apiUploadRevision", () => {
+  it("issues, uploads and commits a revision", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        json({ uploadId: "up1", uploadUrl: "https://storage.example/put", uploadHeaders: { "X-A": "b" } })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(json({ id: "01F", version: 2, url: "https://api.example.com/s/01F?v=2" }));
+
+    const result = await apiUploadRevision("01F", "<h1>v2</h1>", config);
+
+    expect(result).toEqual({ id: "01F", version: 2, url: "https://api.example.com/s/01F?v=2" });
+    const [issueUrl, issueInit] = fetchMock.mock.calls[0];
+    expect(issueUrl).toBe("https://api.example.com/files/01F/versions");
+    expect(issueInit.method).toBe("POST");
+    expect(issueInit.headers.Authorization).toBe("Bearer tok_123");
+    expect(issueInit.body).toBe("{}");
+    const [putUrl, putInit] = fetchMock.mock.calls[1];
+    expect(putUrl).toBe("https://storage.example/put");
+    expect(putInit.method).toBe("PUT");
+    expect(putInit.body).toBe("<h1>v2</h1>");
+    expect(putInit.headers).toEqual({ "X-A": "b" });
+    const [commitUrl, commitInit] = fetchMock.mock.calls[2];
+    expect(commitUrl).toBe("https://api.example.com/files/01F/versions/up1/commit");
+    expect(commitInit.method).toBe("POST");
+    expect(commitInit.headers.Authorization).toBe("Bearer tok_123");
+    expect(commitInit.body).toBe("{}");
+  });
+
+  it("does not commit when the storage upload fails", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ uploadId: "up1", uploadUrl: "https://storage.example/put", uploadHeaders: {} }))
+      .mockResolvedValueOnce(new Response("boom", { status: 500 }));
+    await expect(apiUploadRevision("01F", "x", config)).rejects.toThrow("Storage upload failed 500: boom");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports why a revision was refused", async () => {
+    fetchMock.mockResolvedValue(
+      json({ error: "Revisions are not allowed for files without an owner" }, 403)
+    );
+    await expect(apiUploadRevision("01F", "x", config)).rejects.toThrow(
+      "Forbidden: Revisions are not allowed for files without an owner"
+    );
+  });
+
+  it("reports a refused commit the same way", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ uploadId: "up1", uploadUrl: "https://storage.example/put", uploadHeaders: {} }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(json({ error: "Forbidden" }, 403));
+    await expect(apiUploadRevision("01F", "x", config)).rejects.toThrow("Forbidden: Forbidden");
   });
 });
