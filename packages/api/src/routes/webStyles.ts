@@ -137,12 +137,27 @@ export const titleCellClass = css`
   max-width: 22rem;
 `;
 
+/** タイトルと版の番号を横に並べる行。長いタイトルだけが省略され、番号は残る。 */
+export const titleLineClass = css`
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+`;
+
+export const versionBadgeClass = css`
+  flex: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-500);
+`;
+
 /*
  * タイトルは折り返さず 1 行で省略する。長さで行の高さが変わると、
  * 一覧としての走査性が落ちる。
  */
 export const titleTextClass = css`
   display: block;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
