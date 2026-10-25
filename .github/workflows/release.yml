@@ -47,5 +47,5 @@ jobs:
           SHA256: ${{ steps.sha.outputs.sha256 }}
         run: |
           VERSION="${TAG#v}"
-          NOTES=$(printf '## Install via Homebrew\n\n```\nbrew tap todokr/homebrew-tap\nbrew install timothy\n```\n\n## Formula update (`todokr/homebrew-tap`)\n\n```ruby\nurl "https://github.com/todokr/timothy-cli/releases/download/%s/tim"\nsha256 "%s"\nversion "%s"\n```\n' "$TAG" "$SHA256" "$VERSION")
+          NOTES=$(printf '## Install via Homebrew\n\n```\nbrew tap todokr/homebrew-tap\nbrew install timothy\n```\n\n## Formula update (`todokr/homebrew-tap`)\n\n```ruby\nurl "https://github.com/todokr/timothy/releases/download/%s/tim"\nsha256 "%s"\nversion "%s"\n```\n' "$TAG" "$SHA256" "$VERSION")
           gh release create "$TAG" tim --title "$TAG" --notes "$NOTES"
