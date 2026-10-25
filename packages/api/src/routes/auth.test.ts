@@ -82,6 +82,7 @@ describe("GET /auth/login", () => {
     expect(raw).toContain("HttpOnly");
     expect(raw).toContain("SameSite=Lax");
     expect(raw).toContain("Max-Age=600");
+    expect(raw).toContain("Path=/auth");
     const value = decodeURIComponent(raw.split(";")[0].slice("tim_oauth=".length));
     const flow = verifyValue<{ state: string; verifier: string; next: string }>(value, SECRET);
     expect(flow?.state).toBe(location.searchParams.get("state"));

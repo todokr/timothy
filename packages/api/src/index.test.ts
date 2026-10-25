@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from "vitest";
 
 vi.mock("./lib/firebase.js", () => ({
   db: { collection: vi.fn() },
@@ -131,6 +131,9 @@ describe("authentication", () => {
 
   // redirect と json の requireUser が両方当たるパス。ログイン済みならハンドラまで届くこと
   it("lets a signed-in user reach the header edit page", async () => {
+    onTestFinished(() => {
+      vi.mocked(db.collection).mockReset();
+    });
     vi.mocked(db.collection).mockReturnValue({
       doc: vi.fn().mockReturnValue({ get: vi.fn().mockResolvedValue({ exists: false }) }),
     } as unknown as ReturnType<typeof db.collection>);
@@ -139,7 +142,6 @@ describe("authentication", () => {
     });
     expect(res.status).toBe(404);
     expect(await res.text()).toContain("指定されたファイルが見つかりません");
-    vi.mocked(db.collection).mockReset();
   });
 
   it.each([

@@ -55,14 +55,42 @@ export function getUser(c: Context<AppEnv>): SessionUser {
   return user;
 }
 
+// 制御文字・バックスラッシュを % エンコードしたもの（%00-%1f, %7f, %5c）
+const ENCODED_UNSAFE = /%(?:[01][0-9a-f]|7f|5c)/i;
+
+// 生の制御文字（0x00-0x1f, 0x7f）とバックスラッシュ。
+// 正規表現に制御文字を書くと lint (no-control-regex) に掛かるため、文字コードで判定する
+function hasRawUnsafeChar(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code <= 0x1f || code === 0x7f || code === 0x5c) return true;
+  }
+  return false;
+}
+
+const PLACEHOLDER_ORIGIN = "http://placeholder.invalid";
+
 /**
  * ログイン後の戻り先として許すパスだけを通す（オープンリダイレクト対策）。
- * `//host` と `/\host` はブラウザが別オリジンへの URL と解釈するため弾く。
+ *
+ * 先頭の文字を見るだけでは足りない。ブラウザは Location を解決するときに
+ * タブ・改行を取り除き、`\` を `/` として扱うため、`/<TAB>/host` や `/\host` が
+ * `//host`（別オリジン）になる。そこで、
+ * 1. 制御文字・バックスラッシュ（% エンコード形も含む）を含むものを位置に関係なく弾き、
+ * 2. ダミーのオリジンを基準に URL として解決し、オリジンが変わらないことを確かめ、
+ * 3. 解決後の pathname + search + hash だけを返す。
  */
 export function safeNextPath(next: string | undefined): string {
-  if (!next || !next.startsWith("/")) return "/";
-  if (next.startsWith("//") || next.startsWith("/\\")) return "/";
-  return next;
+  if (!next || !next.startsWith("/") || next.startsWith("//")) return "/";
+  if (hasRawUnsafeChar(next) || ENCODED_UNSAFE.test(next)) return "/";
+  let url: URL;
+  try {
+    url = new URL(next, PLACEHOLDER_ORIGIN);
+  } catch {
+    return "/";
+  }
+  if (url.origin !== PLACEHOLDER_ORIGIN) return "/";
+  return url.pathname + url.search + url.hash;
 }
 
 // Google に登録するリダイレクト URI と完全一致させる必要があるため、

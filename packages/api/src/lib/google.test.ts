@@ -116,6 +116,8 @@ describe("buildAuthorizeUrl", () => {
     expect(u.searchParams.get("redirect_uri")).toBe("https://app/cb");
     expect(u.searchParams.get("state")).toBe("st");
     expect(u.searchParams.get("code_challenge")).toBe("ch");
+    // 許可外のアカウントで弾かれた後に別アカウントを選べるよう、毎回アカウント選択を出す
+    expect(u.searchParams.get("prompt")).toBe("select_account");
     expect(u.searchParams.has("hd")).toBe(false);
   });
   it("adds hd only when a hosted domain is given", () => {

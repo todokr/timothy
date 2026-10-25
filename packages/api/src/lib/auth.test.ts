@@ -13,11 +13,33 @@ import { signValue } from "./signedCookie.js";
 import { TEST_USER, sessionCookieHeader, withUser } from "../test/auth.js";
 
 describe("safeNextPath", () => {
-  it.each(["/s/01ABC?v=2", "/", "/files/01ABC/headers/edit"])("keeps a safe path %s", (p) => {
+  it.each(["/s/01ABC?v=2", "/", "/files/01ABC/headers/edit", "/s/01ABC?v=2#top"])("keeps a safe path %s", (p) => {
     expect(safeNextPath(p)).toBe(p);
   });
 
-  it.each(["//evil.example", "/\\evil.example", "https://evil.example", "evil", "", undefined])(
+  it.each([
+    "//evil.example",
+    "/\\evil.example",
+    "https://evil.example",
+    "evil",
+    "",
+    undefined,
+    // ブラウザは Location 解決時にタブ・改行を取り除くため、/<TAB>/host は //host になる
+    "/\t/evil.example",
+    "/\n/evil.example",
+    "/\r/evil.example",
+    "/\x00/evil.example",
+    "/\x7f/evil.example",
+    // 二重エンコードされた制御文字・バックスラッシュ（後段で一度デコードされても危険にならないよう弾く）
+    "/%09/evil.example",
+    "/%0a/evil.example",
+    "/%5c/evil.example",
+    "/%5C%5Cevil.example",
+    // 先頭以外の位置のバックスラッシュも弾く
+    "/\\/evil.example",
+    "/a\\..\\..\\/evil",
+    "/s/x\\evil",
+  ])(
     "falls back to / for %s",
     (p) => {
       expect(safeNextPath(p as string | undefined)).toBe("/");

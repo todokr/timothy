@@ -33,6 +33,9 @@ export function buildAuthorizeUrl(p: {
     state: p.state,
     code_challenge: p.codeChallenge,
     code_challenge_method: "S256",
+    // 許可外のアカウントで弾かれた後、同じアカウントで自動的に再ログインされて
+    // 抜け出せなくなるのを防ぐため、毎回アカウント選択画面を出す
+    prompt: "select_account",
   });
   if (p.hostedDomain) q.set("hd", p.hostedDomain);
   return `${AUTHORIZE_URL}?${q.toString()}`;
