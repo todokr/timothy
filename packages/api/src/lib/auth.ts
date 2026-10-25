@@ -7,7 +7,18 @@ import { resolveBaseUrl } from "./files.js";
 import { logger } from "./logger.js";
 import { readSessionCookie, type SessionUser } from "./session.js";
 
-export type AppEnv = { Variables: { user: SessionUser } };
+/** どの資格情報でログインしたか。Cookie なら session、Bearer トークンなら token */
+export type AuthMethod = "session" | "token";
+
+export type AppEnv = { Variables: { user: SessionUser; authMethod: AuthMethod } };
+
+const FRAME_EXPIRED_HTML = `<!doctype html>
+<html lang="ja">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ログインが必要です</title></head>
+<body style="font-family: system-ui, sans-serif; padding: 24px; color: #333;">
+<p>ログインの有効期限が切れました。ページを再読み込みしてください。</p>
+</body>
+</html>`;
 
 /**
  * メールアドレスのドメイン（最後の "@" より後ろ）が許可ドメインに含まれるか。
@@ -28,8 +39,11 @@ export function isAllowedEmailDomain(email: string, allowedDomains: string[]): b
  *
  * - `redirect`: ブラウザで開くページ向け。ログイン後に元のページへ戻れるよう next を付けて送る。
  * - `json`: API 向け。リダイレクトすると fetch 側が Google のログイン画面の HTML を受け取ってしまうため 401 を返す。
+ * - `frame`: iframe の中で開かれる本体向け。リダイレクトすると Google が iframe 内での表示を拒否するため、
+ *   401 の小さな HTML を返して再読み込みを促す。Sec-Fetch-Dest が iframe・frame でない（本体の URL を
+ *   直接開いた）ときは、再読み込みしても直らないので `redirect` と同じくログインへ送る。
  */
-export function requireUser(onMissing: "redirect" | "json"): MiddlewareHandler<AppEnv> {
+export function requireUser(onMissing: "redirect" | "json" | "frame"): MiddlewareHandler<AppEnv> {
   return createMiddleware<AppEnv>(async (c, next) => {
     // 同じパスに requireUser が 2 つ重なる配線（/files/:id/headers/edit と /files/*）でも
     // 2 つ目が結果を上書きしないよう、既に決まっていれば何もしない
@@ -49,14 +63,19 @@ export function requireUser(onMissing: "redirect" | "json"): MiddlewareHandler<A
 
     // 探す順序: Cookie → Authorization: Bearer（CLI 用）。
     // Cookie で決まれば Firestore を引かずに済む
+    let authMethod: AuthMethod = "session";
     let user = readSessionCookie(c, config);
     if (!user) {
       const token = readBearerToken(c.req.header("authorization"));
-      if (token) user = await findCliTokenUser(token);
+      if (token) {
+        user = await findCliTokenUser(token);
+        authMethod = "token";
+      }
     }
     // 発行後に許可ドメインから外された場合は、資格情報が無いものとして扱う
     if (user && isAllowedEmailDomain(user.email, config.allowedDomains)) {
       c.set("user", user);
+      c.set("authMethod", authMethod);
       await next();
       return;
     }
@@ -64,9 +83,17 @@ export function requireUser(onMissing: "redirect" | "json"): MiddlewareHandler<A
     if (onMissing === "json") {
       return c.json({ error: "Unauthorized" }, 401);
     }
+    if (onMissing === "frame" && isFrameRequest(c)) {
+      return c.html(FRAME_EXPIRED_HTML, 401, { "Cache-Control": "no-store" });
+    }
     const url = new URL(c.req.url);
     return c.redirect(`/auth/login?next=${encodeURIComponent(url.pathname + url.search)}`, 302);
   });
+}
+
+function isFrameRequest(c: Context): boolean {
+  const dest = c.req.header("sec-fetch-dest");
+  return dest === "iframe" || dest === "frame";
 }
 
 export function getUser(c: Context<AppEnv>): SessionUser {
@@ -74,6 +101,12 @@ export function getUser(c: Context<AppEnv>): SessionUser {
   // requireUser を通さずに呼ばれたのは配線の誤り。匿名として続行させない
   if (!user) throw new Error("getUser called on a route without requireUser");
   return user;
+}
+
+export function getAuthMethod(c: Context<AppEnv>): AuthMethod {
+  const method = c.get("authMethod");
+  if (!method) throw new Error("getAuthMethod called on a route without requireUser");
+  return method;
 }
 
 // 制御文字・バックスラッシュを % エンコードしたもの（%00-%1f, %7f, %5c）

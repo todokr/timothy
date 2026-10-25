@@ -105,7 +105,16 @@ describe("GET /s/:id/v/:n", () => {
     mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
     const res = await app.request("/01ABC/v/1");
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe("<h1>report</h1>");
+    expect(await res.text()).toContain("<h1>report</h1>");
+  });
+
+  it("serves the stored HTML with the bridge injected and the CSP unchanged", async () => {
+    mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: future() }) });
+    const res = await app.request("/01ABC/v/1");
+    const text = await res.text();
+    expect(text).toContain("<script data-tim-bridge>");
+    expect(text).toContain("<h1>report</h1>");
+    expect(res.headers.get("content-security-policy")).toContain("connect-src 'none'");
   });
 
   // Uploaded HTML is served from the same origin as the admin UI, so without a
@@ -224,6 +233,6 @@ describe("GET /s/:id/v/:n", () => {
     mockDoc({ exists: true, data: () => ({ storagePath: "p", expiresAt: null }) });
     const res = await app.request("/01ABC/v/1");
     expect(res.status).toBe(200);
-    expect(await res.text()).toBe("<h1>report</h1>");
+    expect(await res.text()).toContain("<h1>report</h1>");
   });
 });

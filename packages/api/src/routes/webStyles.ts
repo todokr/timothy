@@ -644,3 +644,241 @@ export const viewerFrameClass = css`
   border: 0;
   background: var(--gray-0);
 `;
+
+// ヘッダーの「要素を選んでコメント」。モード中は aria-pressed="true" で押された見た目にする。
+export const pickToggleClass = css`
+  margin-left: auto;
+  font: inherit;
+  padding: var(--space-1) var(--space-3);
+  color: var(--gray-900);
+  background: var(--gray-0);
+  border: 1px solid var(--gray-300);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+
+  &[aria-pressed="true"] {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-color: var(--accent);
+  }
+
+  &:disabled {
+    color: var(--gray-400);
+    cursor: not-allowed;
+  }
+`;
+
+// 本文（左）とコメントパネル（右）を横に並べる。
+export const viewerBodyClass = css`
+  flex: 1;
+  display: flex;
+  min-height: 0;
+`;
+
+/*
+ * コメントパネル。中身はスクリプトが組み立てるので、子要素はハッシュの付かない
+ * クラス名（.card など）で指定する。見た目は試作（暗い背景にカードを並べる）に合わせる。
+ */
+export const commentPanelClass = css`
+  box-sizing: border-box;
+  flex: none;
+  width: 360px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  font-size: 13px;
+  color: #e6edf3;
+  background: #24292f;
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  button {
+    font: inherit;
+    padding: 4px 10px;
+    color: #e6edf3;
+    background: #2d333b;
+    border: 1px solid #3d444d;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  button:hover:not(:disabled) {
+    border-color: #9198a1;
+  }
+
+  button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  button.primary {
+    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 70px;
+    resize: vertical;
+    padding: 8px;
+    font: inherit;
+    color: #e6edf3;
+    background: #0d1117;
+    border: 1px solid #3d444d;
+    border-radius: 6px;
+  }
+
+  .composer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    background: #1c2128;
+    border: 1px solid #3d444d;
+    border-radius: 8px;
+  }
+
+  .hint {
+    font-size: 12px;
+    color: #9198a1;
+  }
+
+  .row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .row.spread {
+    justify-content: space-between;
+  }
+
+  .threads {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card {
+    padding: 10px;
+    background: #1c2128;
+    border: 1px solid #3d444d;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+
+  .card.active {
+    border-color: #f59e0b;
+  }
+
+  .card.resolved {
+    opacity: 0.55;
+  }
+
+  .card.outdated .anchor,
+  .card.outdated .body {
+    opacity: 0.7;
+  }
+
+  .anchor {
+    margin-bottom: 6px;
+    padding-left: 8px;
+    font-style: italic;
+    color: #c9d1d9;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-left: 3px solid #eab308;
+  }
+
+  .anchor.el {
+    font-style: normal;
+    border-color: #58a6ff;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 2px;
+  }
+
+  .labels {
+    display: contents;
+  }
+
+  .label {
+    padding: 0 6px;
+    font-size: 11px;
+    color: #9198a1;
+    border: 1px solid #3d444d;
+    border-radius: 10px;
+  }
+
+  .body {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .reply {
+    margin: 8px 0 0 10px;
+    padding-left: 8px;
+    border-left: 2px solid #3d444d;
+  }
+
+  .actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .actions button {
+    padding: 2px 8px;
+    font-size: 11px;
+  }
+
+  .reply-box {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .error {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #ff8182;
+  }
+`;
+
+export const viewerToastClass = css`
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  z-index: 50;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  font-size: 13px;
+  color: #fff;
+  background: #24292f;
+  border-radius: 8px;
+
+  &[hidden] {
+    display: none;
+  }
+`;

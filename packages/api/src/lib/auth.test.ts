@@ -11,7 +11,7 @@ vi.mock("./cliTokens.js", async (importOriginal) => ({
 }));
 
 import { Hono } from "hono";
-import { getUser, isAllowedEmailDomain, requireUser, redirectUri, safeNextPath, type AppEnv } from "./auth.js";
+import { getAuthMethod, getUser, isAllowedEmailDomain, requireUser, redirectUri, safeNextPath, type AppEnv } from "./auth.js";
 import { loadAuthConfig } from "./authConfig.js";
 import { SESSION_COOKIE, readSessionCookie, setSessionCookie } from "./session.js";
 import { signValue } from "./signedCookie.js";
@@ -74,7 +74,7 @@ describe("safeNextPath", () => {
   });
 });
 
-function appWith(onMissing: "redirect" | "json") {
+function appWith(onMissing: "redirect" | "json" | "frame") {
   const app = new Hono<AppEnv>();
   app.use("*", requireUser(onMissing));
   app.get("*", (c) => c.json(getUser(c)));
@@ -113,6 +113,44 @@ describe("requireUser", () => {
     const redirect = await appWith("redirect").request("/x");
     expect(redirect.status).toBe(500);
   });
+
+  it("records a session login as authMethod session", async () => {
+    const app = new Hono<AppEnv>();
+    app.use("*", requireUser("json"));
+    app.get("*", (c) => c.json({ method: getAuthMethod(c) }));
+    const res = await app.request("/x", { headers: { cookie: sessionCookieHeader() } });
+    expect(await res.json()).toEqual({ method: "session" });
+  });
+
+  it("records a CLI token login as authMethod token", async () => {
+    vi.mocked(findCliTokenUser).mockResolvedValue(TEST_USER);
+    const app = new Hono<AppEnv>();
+    app.use("*", requireUser("json"));
+    app.get("*", (c) => c.json({ method: getAuthMethod(c) }));
+    const res = await app.request("/x", { headers: { authorization: "Bearer tim_abc" } });
+    expect(await res.json()).toEqual({ method: "token" });
+    vi.mocked(findCliTokenUser).mockReset();
+  });
+
+  it.each(["iframe", "frame"])(
+    "answers an unauthenticated request loaded as %s with a 401 page instead of a redirect",
+    async (dest) => {
+      const res = await appWith("frame").request("/x", { headers: { "sec-fetch-dest": dest } });
+      expect(res.status).toBe(401);
+      expect(res.headers.get("location")).toBeNull();
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      expect(await res.text()).toContain("ログインの有効期限が切れました");
+    },
+  );
+
+  it.each([{ "sec-fetch-dest": "document" }, {}])(
+    "redirects a top-level visit to the frame URL to login (%o)",
+    async (headers: Record<string, string>) => {
+      const res = await appWith("frame").request("/s/01ABC/v/2?x=1", { headers });
+      expect(res.status).toBe(302);
+      expect(res.headers.get("location")).toBe("/auth/login?next=%2Fs%2F01ABC%2Fv%2F2%3Fx%3D1");
+    },
+  );
 
   it("does nothing when a user is already set", async () => {
     const sub = new Hono<AppEnv>();
