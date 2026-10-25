@@ -22,8 +22,8 @@ URLはCloud Run / AWS Lambda上のAPIを経由して配信されます。APIが�
 `<iframe>`埋め込みはブロックされます。
 
 共有ページ（`/s/<id>`）は timothy の画面で、本体の HTML は同じオリジンの iframe
-（`/s/<id>/v/<版>`）で表示します。どちらも他サイトからの`<iframe>`埋め込みは拒否します
-（`X-Frame-Options: DENY`）。
+（`/s/<id>/v/<版>`）で表示します。外枠は`X-Frame-Options: DENY`、
+本体は同じオリジンからの埋め込みだけを許す`SAMEORIGIN`で、どちらも他サイトからは埋め込めません。
 
 同じ URL に修正版を上げられます（所有者のみ）。版は 1 から順に番号が付き、
 `/s/<id>?v=<版>` で過去の版を開けます。版の指定がなければ最新版を表示します。
@@ -122,8 +122,8 @@ tim list --mine
 
 ```
 URL                         TITLE             OWNER              CREATED       EXPIRES
-https://.../s/01JWXYZ...    月次レポート        alice@example.com  2026-05-20    2026-05-27
-https://.../s/01JWABC...    分析結果            -                  2026-05-18    2026-05-25
+https://.../s/01JWXYZ...    v1 月次レポート     alice@example.com  2026-05-20    2026-05-27
+https://.../s/01JWABC...    v1 分析結果         -                  2026-05-18    2026-05-25
 ```
 
 OWNER は所有者のメールアドレスです。所有者が記録されていないファイル（認証導入前のもの）は `-` です。

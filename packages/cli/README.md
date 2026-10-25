@@ -74,8 +74,8 @@ tim list --mine
 
 ```
 URL                         TITLE             OWNER              CREATED       EXPIRES
-https://.../s/01JWXYZ...    Monthly Report    alice@example.com  2026-05-20    2026-05-27
-https://.../s/01JWABC...    Analysis          -                  2026-05-18    2026-05-25
+https://.../s/01JWXYZ...    v1 Monthly Report alice@example.com  2026-05-20    2026-05-27
+https://.../s/01JWABC...    v1 Analysis       -                  2026-05-18    2026-05-25
 ```
 
 Files with no recorded owner (uploaded before login existed) show `-`.
