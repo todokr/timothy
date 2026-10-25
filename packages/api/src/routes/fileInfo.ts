@@ -58,6 +58,8 @@ app.get("/:id/content", async (c) => {
 
   const html = await getFileContent(version.storagePath);
   c.header("Cache-Control", "no-store");
+  // 本文は利用者の HTML なので、JSON を別の型として解釈させない。
+  c.header("X-Content-Type-Options", "nosniff");
   return c.json({ id, version: n, html });
 });
 

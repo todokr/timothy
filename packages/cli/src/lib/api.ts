@@ -176,7 +176,7 @@ export async function apiReply(
   body: string,
   config: Config
 ): Promise<Comment> {
-  const res = await fetch(`${config.apiEndpoint}/files/${id}/comments/${commentId}/replies`, {
+  const res = await fetch(`${config.apiEndpoint}/files/${id}/comments/${encodeURIComponent(commentId)}/replies`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify({ body }),
@@ -195,7 +195,7 @@ export async function apiUploadRevision(
   const base = `${config.apiEndpoint}/files/${fileId}/versions`;
 
   const issueRes = await fetch(base, { method: "POST", headers, body: "{}" });
-  await assertRevisionOk(issueRes);
+  await assertFileOk(issueRes, fileId);
   const issued = (await issueRes.json()) as {
     uploadId: string;
     uploadUrl: string;
@@ -217,7 +217,7 @@ export async function apiUploadRevision(
   let commitRes = await commit();
   // 確定は同じ uploadId なら繰り返しても安全なので、サーバーの一時的な失敗に限り 1 回だけやり直す。
   if (commitRes.status >= 500) commitRes = await commit();
-  await assertRevisionOk(commitRes);
+  await assertFileOk(commitRes, fileId);
   return (await commitRes.json()) as RevisionResponse;
 }
 

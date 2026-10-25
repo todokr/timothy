@@ -6,6 +6,7 @@ import { REVIEW_WORKFLOW } from "./instructions.js";
 import { createServer, type ServerDeps } from "./server.js";
 
 const ID = "01M5S269ZPZAQ65A57RD9VR76G";
+const CID = "01JWABCDEFGHJKMNPQRSTVWXYZ";
 const config = { apiEndpoint: "https://api.example.com" };
 const izumi = { email: "izumi@example.com", name: "泉" };
 const tanaka = { email: "tanaka@example.com", name: "田中" };
@@ -141,7 +142,7 @@ describe("mcp server", () => {
 
   it("returns HTML and versions for a share URL", async () => {
     vi.mocked(deps.apiGetContent).mockResolvedValue({ id: ID, version: 2, html: "<h1>v2</h1>" });
-    const res = await call("get_file", { file: `https://tim.example.com/s/${ID}?v=2` });
+    const res = await call("get_file", { file: `https://tim.example.com/s/${ID}` });
     expect(res.isError).toBeFalsy();
     expect(deps.apiGetFile).toHaveBeenCalledWith(ID, config);
     expect(deps.apiGetContent).toHaveBeenCalledWith(ID, undefined, config);
@@ -157,6 +158,24 @@ describe("mcp server", () => {
       version: 2,
       html: "<h1>v2</h1>",
     });
+  });
+
+  it("uses the v of a share URL when version is omitted", async () => {
+    vi.mocked(deps.apiGetContent).mockResolvedValue({ id: ID, version: 1, html: "<h1>v1</h1>" });
+    await call("get_file", { file: `https://tim.example.com/s/${ID}?v=1` });
+    expect(deps.apiGetContent).toHaveBeenCalledWith(ID, 1, config);
+  });
+
+  it("prefers the explicit version over the v of a share URL", async () => {
+    vi.mocked(deps.apiGetContent).mockResolvedValue({ id: ID, version: 2, html: "<h1>v2</h1>" });
+    await call("get_file", { file: `https://tim.example.com/s/${ID}?v=1`, version: 2 });
+    expect(deps.apiGetContent).toHaveBeenCalledWith(ID, 2, config);
+  });
+
+  it.each(["0", "-1", "abc", "1.5"])("ignores an invalid v=%s in a share URL", async (v) => {
+    vi.mocked(deps.apiGetContent).mockResolvedValue({ id: ID, version: 2, html: "<h1>v2</h1>" });
+    await call("get_file", { file: `https://tim.example.com/s/${ID}?v=${v}` });
+    expect(deps.apiGetContent).toHaveBeenCalledWith(ID, undefined, config);
   });
 
   it("fetches the requested version", async () => {
@@ -212,19 +231,28 @@ describe("mcp server", () => {
     });
     const res = await call("reply_to_comment", {
       file: ID,
-      commentId: "01C",
+      commentId: CID,
       body: "v3 で直しました",
     });
-    expect(deps.apiReply).toHaveBeenCalledWith(ID, "01C", "v3 で直しました", config);
-    expect(parse(res)).toEqual({ commentId: "01C", replies: 2 });
+    expect(deps.apiReply).toHaveBeenCalledWith(ID, CID, "v3 で直しました", config);
+    expect(parse(res)).toEqual({ commentId: CID, replies: 2 });
   });
 
   it("names both the file and the comment when the reply target is not found", async () => {
     vi.mocked(deps.apiReply).mockRejectedValue(new Error(`Not found: ${ID}`));
-    const res = await call("reply_to_comment", { file: ID, commentId: "01C", body: "x" });
+    const res = await call("reply_to_comment", { file: ID, commentId: CID, body: "x" });
     expect(res.isError).toBe(true);
-    expect(res.content[0].text).toBe(`Not found: file ${ID} or comment 01C`);
+    expect(res.content[0].text).toBe(`Not found: file ${ID} or comment ${CID}`);
   });
+
+  it.each(["../resolve", "01C", "a/b", ""])(
+    "rejects the malformed commentId %j without calling the API",
+    async (commentId) => {
+      const res = await call("reply_to_comment", { file: ID, commentId, body: "x" });
+      expect(res.isError).toBe(true);
+      expect(deps.apiReply).not.toHaveBeenCalled();
+    }
+  );
 
   it("uploads a revision from a local file", async () => {
     vi.mocked(deps.readFile).mockResolvedValue("<h1>x</h1>");
@@ -256,6 +284,27 @@ describe("mcp server", () => {
     const res = await call("upload_revision", { file: ID, path: "/nope.html" });
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain("Cannot read file: /nope.html");
+    expect(deps.apiUploadRevision).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty html string without calling the API", async () => {
+    const res = await call("upload_revision", { file: ID, html: "" });
+    expect(res.isError).toBe(true);
+    expect(deps.apiUploadRevision).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty path without calling the API", async () => {
+    const res = await call("upload_revision", { file: ID, path: "" });
+    expect(res.isError).toBe(true);
+    expect(deps.readFile).not.toHaveBeenCalled();
+    expect(deps.apiUploadRevision).not.toHaveBeenCalled();
+  });
+
+  it("does not call the API when the local file is empty", async () => {
+    vi.mocked(deps.readFile).mockResolvedValue("");
+    const res = await call("upload_revision", { file: ID, path: "/tmp/empty.html" });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe("Cannot upload an empty file: /tmp/empty.html");
     expect(deps.apiUploadRevision).not.toHaveBeenCalled();
   });
 

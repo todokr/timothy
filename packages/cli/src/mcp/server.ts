@@ -56,6 +56,17 @@ async function run(fn: () => Promise<unknown>): Promise<CallToolResult> {
   }
 }
 
+/** 共有 URL の ?v= が正の整数ならその版の番号を返す。ID だけ・不正な値なら undefined。 */
+function versionFromUrl(file: string): number | undefined {
+  try {
+    const v = new URL(file).searchParams.get("v");
+    if (v !== null && /^[1-9][0-9]*$/.test(v)) return Number(v);
+  } catch {
+    // URL でなければ（ID だけなど）版の指定は無い。
+  }
+  return undefined;
+}
+
 function toFileId(file: string): string {
   const id = parseFileRef(file);
   if (!id) throw new Error(`Invalid file: ${file}`);
@@ -126,16 +137,17 @@ export function createServer(overrides: Partial<ServerDeps> = {}): McpServer {
         "ファイルの情報（タイトル・版の一覧）と、保存された HTML を返す。version を省くと最新版。配信用に差し込まれたもの（ブリッジスクリプトなど）は含まない。",
       inputSchema: {
         file: fileArg,
-        version: z.number().int().positive().optional().describe("取得する版の番号。省くと最新版"),
+        version: z.number().int().positive().optional().describe("取得する版の番号。省くと、共有 URL の ?v= があればその版、なければ最新版"),
       },
     },
     ({ file, version }) =>
       run(async () => {
         const id = toFileId(file);
         const c = await config();
+        const v = version ?? versionFromUrl(file);
         const [info, content] = await Promise.all([
           deps.apiGetFile(id, c),
-          deps.apiGetContent(id, version, c),
+          deps.apiGetContent(id, v, c),
         ]);
         return {
           id: info.id,
@@ -183,7 +195,10 @@ export function createServer(overrides: Partial<ServerDeps> = {}): McpServer {
       description: "コメントに返信する。返信は agent 経由として記録される。コメントを解決にはしない。",
       inputSchema: {
         file: fileArg,
-        commentId: z.string().describe("返信するコメントの ID（list_comments の id）"),
+        commentId: z
+          .string()
+          .regex(/^[0-9A-HJKMNP-TV-Z]{26}$/, "commentId must be a ULID")
+          .describe("返信するコメントの ID（list_comments の id）"),
         body: z.string().min(1).max(10_000).describe("返信の本文（1〜10,000 文字）"),
       },
     },
@@ -208,11 +223,11 @@ export function createServer(overrides: Partial<ServerDeps> = {}): McpServer {
     "upload_revision",
     {
       description:
-        "ファイルに修正版をアップロードし、新しい版の番号と URL を返す。本文は path（手元の HTML ファイルのパス）か html（HTML の文字列）のどちらか 1 つで渡す。所有者だけが上げられる。",
+        "ファイルに修正版をアップロードし、新しい版の番号と URL を返す。本文は path（手元の HTML ファイルのパス。MCP サーバーの作業ディレクトリからの相対で解決されるので、絶対パスで渡す）か html（HTML の文字列）のどちらか 1 つで渡す。所有者だけが上げられる。",
       inputSchema: {
         file: fileArg,
-        path: z.string().optional().describe("修正版の HTML ファイルのパス"),
-        html: z.string().optional().describe("修正版の HTML の文字列"),
+        path: z.string().min(1).optional().describe("修正版の HTML ファイルのパス"),
+        html: z.string().min(1).optional().describe("修正版の HTML の文字列"),
       },
     },
     ({ file, path, html }) =>
@@ -229,6 +244,7 @@ export function createServer(overrides: Partial<ServerDeps> = {}): McpServer {
           } catch {
             throw new Error(`Cannot read file: ${path}`);
           }
+          if (body.length === 0) throw new Error(`Cannot upload an empty file: ${path}`);
         } else {
           body = html as string;
         }

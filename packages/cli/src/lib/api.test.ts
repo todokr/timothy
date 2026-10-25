@@ -144,6 +144,14 @@ describe("apiUploadRevision", () => {
     );
   });
 
+  it.each([
+    [404, "Not found: 01F"],
+    [410, "Expired: 01F"],
+  ])("maps %i on issuing a revision to a readable error", async (status, message) => {
+    fetchMock.mockResolvedValue(json({ error: "x" }, status));
+    await expect(apiUploadRevision("01F", "x", config)).rejects.toThrow(message);
+  });
+
   it("reports a refused commit the same way", async () => {
     fetchMock
       .mockResolvedValueOnce(json({ uploadId: "up1", uploadUrl: "https://storage.example/put", uploadHeaders: {} }))
@@ -232,6 +240,14 @@ describe("file info, content and comments", () => {
     expect(init.headers["Content-Type"]).toBe("application/json");
     expect(init.headers.Authorization).toBe("Bearer tok_123");
     expect(init.body).toBe(JSON.stringify({ body: "v3 で直しました" }));
+  });
+
+  it("URL-encodes the commentId in the reply URL", async () => {
+    fetchMock.mockResolvedValue(json({ comment: { id: "x", replies: [] } }, 201));
+    await apiReply("01F", "../resolve", "b", config);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://api.example.com/files/01F/comments/..%2Fresolve/replies"
+    );
   });
 
   it.each([

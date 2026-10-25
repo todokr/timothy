@@ -135,6 +135,7 @@ describe("GET /files/:id/content", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toMatch(/^application\/json/);
     expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     const body = await res.json();
     expect(body).toEqual({ id: "01F", version: 2, html: "<h1>v2</h1>" });
     expect(body.html).not.toContain("data-tim-bridge");
