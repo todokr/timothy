@@ -133,7 +133,7 @@ gcloud run deploy timothy-api \
   --service-account your-runtime-sa@${PROJECT}.iam.gserviceaccount.com \
   --set-env-vars FIREBASE_PROJECT_ID=${PROJECT} \
   --set-env-vars FIREBASE_STORAGE_BUCKET=your-bucket-name.appspot.com \
-  --no-allow-unauthenticated
+  --allow-unauthenticated
 ```
 
 サービスアカウントキーを明示的に使う場合は、上記に加えて
@@ -154,6 +154,8 @@ gcloud run deploy timothy-api \
 | `GOOGLE_OAUTH_CLIENT_SECRET` | OAuth クライアントシークレット（必須） | Secret Manager |
 | `SESSION_SECRET` | セッション署名用のランダム文字列（必須） | Secret Manager |
 | `ALLOWED_EMAIL_DOMAINS` | ログインを許可するメールドメイン、カンマ区切り（必須） | 環境変数（非シークレット） |
+| `ALLOWED_IPS` | （任意）アクセスを許可する IP・CIDR のカンマ区切り。未設定なら IP 制限なし（ログインは必須） | 環境変数（非シークレット） |
+| `XFF_TRUSTED_HOPS` | （任意）サービスの前段で `X-Forwarded-For` に追記するプロキシの段数（既定 `1`）。末尾からこの数だけ遡ったエントリをクライアント IP とする。Cloud Armor / Cloud Load Balancer 経由なら `2` | 環境変数（非シークレット） |
 | `PUBLIC_BASE_URL` | （任意）API の公開 URL。コールバック URL の基準を固定する。承認済みリダイレクト URI は `<公開 URL>/auth/callback` | 環境変数（非シークレット） |
 | `PORT` | サーバーのリッスンポート（デフォルト: 3000） | Cloud Run が 8080 を自動注入 |
 

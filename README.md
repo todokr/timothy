@@ -245,7 +245,7 @@ agent は、未解決のコメントを読み、手元の HTML を直し、修�
 | ツール | 内容 |
 |---|---|
 | `list_files` | 自分がアップロードしたファイルの一覧（`tim list --mine` 相当） |
-| `get_file` | ファイルの情報（タイトル・版の一覧）と保存された HTML。`version` を省くと最新版 |
+| `get_file` | ファイルの情報（タイトル・版の一覧）と保存された HTML。`version` を省くと、共有 URL の `?v=` があればその版、なければ最新版 |
 | `list_comments` | コメントを全部の版の分まとめて返す。既定は未解決のみで、`includeResolved: true` で解決済みも含める |
 | `reply_to_comment` | コメントに返信する（`file`・`commentId`・`body`。1〜10,000 文字） |
 | `upload_revision` | 修正版を上げ、新しい版の番号と URL を返す。本文は `path`（HTML ファイルのパス）か `html`（文字列）のどちらか 1 つ |
@@ -258,6 +258,7 @@ agent は、未解決のコメントを読み、手元の HTML を直し、修�
   （`path` は JS 実行後の DOM での位置で、保存された HTML とは対応しないためです）。
   Outdated かどうかも返さないので、agent が最新版の HTML と突き合わせて判断します。
 - `upload_revision` は `tim upload --to` と同じく、所有者だけが上げられます。
+- `upload_revision` の `path` は MCP サーバープロセスの作業ディレクトリからの相対で解決されるので、絶対パスで渡してください。
 
 ## セルフホスティング
 

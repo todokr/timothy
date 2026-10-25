@@ -114,7 +114,7 @@ In every tool, `file` is a file ID (ULID) or a share URL.
 | Tool | What it does |
 |---|---|
 | `list_files` | Lists the files you uploaded (like `tim list --mine`) |
-| `get_file` | Returns the file info (title, version list) and the stored HTML. `version` defaults to the latest |
+| `get_file` | Returns the file info (title, version list) and the stored HTML. `version` defaults to the `?v=` of a share URL if present, otherwise the latest |
 | `list_comments` | Returns comments across all versions. Unresolved only by default; `includeResolved: true` adds resolved ones |
 | `reply_to_comment` | Replies to a comment (`file`, `commentId`, `body` of 1 to 10,000 characters) |
 | `upload_revision` | Uploads a revision and returns the new version number and URL. Pass the HTML as either `path` (a local file) or `html` (a string), not both |
@@ -126,6 +126,7 @@ Notes:
 - `get_file` returns the stored HTML as uploaded; the bridge script injected at serve time is not included.
 - Element comments carry `tag` and `text` but no DOM `path` (a path refers to the DOM after scripts ran and does not match the stored HTML). Whether a comment is outdated is not reported; the agent compares it against the latest HTML.
 - `upload_revision` follows the same rule as `tim upload --to`: only the owner can upload a revision.
+- `upload_revision` resolves `path` relative to the MCP server process's working directory, so pass an absolute path.
 
 ## Publishing (maintainers)
 
