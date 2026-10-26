@@ -379,7 +379,8 @@ OAuthクライアントのIDとシークレットは手順5で作成します。
 APIはGoogleアカウントでのログインを必須とします。クライアントを作る前に、同じプロジェクトでOAuth同意画面
 （Google Auth Platform のブランディング・対象）を作成してください。Google Workspace の組織内で使うなら、
 ユーザーの種類は **「内部」** を選びます。組織外のアカウントはGoogle側でも拒否され、Googleの審査も不要です
-（timothyが要求するスコープは `openid`・`email`・`profile` だけです）。
+（timothyが要求するスコープは `openid`・`email` だけです）。
+`profile` を要求しないため、画面に出る名前はメールアドレスになります。
 
 続いてGoogle Cloud ConsoleのAPIとサービス →
 認証情報で「OAuthクライアントID」（アプリケーションの種類: ウェブアプリケーション）を作成し、

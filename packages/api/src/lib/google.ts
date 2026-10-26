@@ -29,7 +29,10 @@ export function buildAuthorizeUrl(p: {
     client_id: p.clientId,
     redirect_uri: p.redirectUri,
     response_type: "code",
-    scope: "openid email profile",
+    // profile は要求しない。Google はコールバックの URL に scope を付けて返す。そこに入る
+    // userinfo.profile の「.profile」を、WAF の LFI ルール（OWASP CRS 930120 など）が攻撃と誤検知するため。
+    // 名前は ID トークンに入らなくなり、表示はメールアドレスになる。
+    scope: "openid email",
     state: p.state,
     code_challenge: p.codeChallenge,
     code_challenge_method: "S256",
