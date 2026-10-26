@@ -110,7 +110,7 @@ describe("buildAuthorizeUrl", () => {
     const u = new URL(buildAuthorizeUrl(p));
     expect(u.origin + u.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
     expect(u.searchParams.get("response_type")).toBe("code");
-    expect(u.searchParams.get("scope")).toBe("openid email profile");
+    expect(u.searchParams.get("scope")).toBe("openid email");
     expect(u.searchParams.get("code_challenge_method")).toBe("S256");
     expect(u.searchParams.get("client_id")).toBe("cid");
     expect(u.searchParams.get("redirect_uri")).toBe("https://app/cb");
